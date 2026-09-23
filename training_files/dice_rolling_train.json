@@ -1315,9 +1315,7 @@
           }
         }
       ]
-    }
-  ],
-  "pending_examples": [
+    },
     {
       "id": "dice_train_000049",
       "input_mode": "observed_event",
@@ -1331,6 +1329,38 @@
       "observed_event": {
         "zh": "角色已经核对地标，正在将测得的方位标上海图，推定船位并规划绕开浅滩的航线；定位与航线是否正确尚未确定。",
         "en": "The character has confirmed the landmarks and is plotting the measured bearings on the chart to establish the vessel's position and plan a route around the shoals. Whether the position and route are correct remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "普通导航",
+        "roll_required": true,
+        "check_mode": "single",
+        "checks": [
+          {
+            "kind": "skill",
+            "name": "Navigation",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "creator_default"
+          }
+        ],
+        "rationale": null
+      }
+    }
+  ],
+  "pending_examples": [
+    {
+      "id": "dice_train_000050",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。角色正在参加剧院独唱演员的试演，需要不借助伴奏，完整演唱一首约90秒的指定歌曲。角色已经熟记歌词和旋律，曲子在其可发声的音域内，但包含几处较大的音高跳跃，以及结尾持续8秒的长音。评审会根据音准、节奏和声音是否稳定决定是否录用。试演室安静，角色身体健康、嗓音正常，允许开始前喝水，但正式试演只有一次机会。",
+        "en": "Outside combat, the character is auditioning as a solo singer for a theatre. They must sing a designated song lasting about 90 seconds without accompaniment. They know the lyrics and melody by heart, and the notes are within their vocal range, but the song includes several large pitch jumps and a final note sustained for eight seconds. The judges will decide whether to hire them based on pitch accuracy, rhythm, and vocal steadiness. The audition room is quiet. The character is healthy and their voice is in normal condition. They may drink water beforehand, but have only one official attempt."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色已经开始正式演唱，正在按记忆中的旋律控制音高、节奏和呼吸；能否稳定完成整首歌曲尚未确定。",
+        "en": "The character has begun the official performance and is controlling pitch, rhythm, and breathing while singing the memorized melody. Whether they can perform the entire song steadily remains unresolved."
       },
       "annotation": null
     }
