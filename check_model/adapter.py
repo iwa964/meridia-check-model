@@ -63,6 +63,7 @@ class Row:
     reference: dict  # {"roll_required": bool, "options": [[check, ...], ...]}
     target: dict | None  # the one decision to train on; None for eval-only rows
     links: list[str] = field(default_factory=list)
+    similarity_text: str = ""  # scene + action in every language, for near-duplicate grouping
     split: str | None = None
     group: str | None = None
 
@@ -192,6 +193,17 @@ def _input(record: dict, lang: str) -> dict:
     return out
 
 
+def _all_languages(record: dict) -> str:
+    """Scene and action text in every language the record carries: two variations that differ
+    in the prompt language but match in the other are still one scenario."""
+    parts = []
+    for key in ("scene", "player_action", "observed_event"):
+        value = record.get(key)
+        if isinstance(value, dict):
+            parts.extend(str(v) for _, v in sorted(value.items()) if isinstance(v, str))
+    return " ".join(parts)
+
+
 def _links(value: Any) -> list[str]:
     """Every `related_example_id` anywhere in a record: the dataset's own marker for two
     entries that are variations of one scenario."""
@@ -306,7 +318,8 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
                     report.errors.append({"source": where, "id": rid, "message": str(invalid)})
                     continue
                 row = Row(id=rid, source=source, section=section, scope=scope, lang=lang,
-                          input=inp, reference=reference, target=target, links=report.all_ids[rid])
+                          input=inp, reference=reference, target=target, links=report.all_ids[rid],
+                          similarity_text=_all_languages(record))
                 rows.append(row)
                 if target is None:
                     report.eval_only.append({"id": rid, "source": where,

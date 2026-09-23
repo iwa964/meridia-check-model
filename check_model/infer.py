@@ -19,6 +19,20 @@ from . import prompt
 from .catalog import load_catalog
 
 
+def base_revision(base: dict) -> str | None:
+    """The base weights the run was trained on: the hub commit recorded at training time, else
+    the configured revision. Without this, a run trained against a moving branch head would be
+    served (and scored) against whatever the head is today."""
+    return base.get("resolved_commit") or base.get("revision")
+
+
+def check_format(manifest: dict) -> None:
+    got = manifest["prompt"]["format_version"]
+    if got != prompt.PROMPT_FORMAT_VERSION:
+        raise ValueError(f"run uses prompt format {got}, this code serves format {prompt.PROMPT_FORMAT_VERSION}; "
+                         "retrain, or load it with the code version that trained it")
+
+
 class CheckModel:
     def __init__(self, run_dir: str | Path, *, max_new_tokens: int = 64, device: str | None = None):
         import torch
@@ -26,12 +40,14 @@ class CheckModel:
 
         self.run_dir = Path(run_dir)
         self.manifest = json.loads((self.run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+        check_format(self.manifest)
         self.system = self.manifest["prompt"]["system_prompt"]
         self.catalog = load_catalog(self.run_dir / "catalog.json")
         model_dir = self.run_dir / "model"
         base = self.manifest["base_model"]
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        dtype = torch.bfloat16 if self.manifest["precision"] == "bf16" and self.device == "cuda" else torch.float32
+        half = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(self.manifest["precision"])
+        dtype = half if half is not None and self.device == "cuda" else torch.float32
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
         self.tokenizer.padding_side = "left"  # decoder-only batch generation
@@ -39,7 +55,7 @@ class CheckModel:
             from peft import PeftModel
 
             model = AutoModelForCausalLM.from_pretrained(
-                base["name_or_path"], revision=base["revision"], dtype=dtype,
+                base["name_or_path"], revision=base_revision(base), dtype=dtype,
                 trust_remote_code=base["trust_remote_code"])
             model = PeftModel.from_pretrained(model, model_dir)
         else:
@@ -52,12 +68,26 @@ class CheckModel:
         self.generation = GenerationConfig(
             do_sample=False, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.pad_token_id,
             eos_token_id=stop if stop is not None else self.tokenizer.eos_token_id)
+        self.context_limit = getattr(self.model.config, "max_position_embeddings", None)
+
+    def render(self, query: dict) -> str:
+        return self.tokenizer.apply_chat_template(prompt.messages(self.system, query), tokenize=False,
+                                                  add_generation_prompt=True)
+
+    def length_error(self, query: dict) -> str | None:
+        """Why a query cannot be generated for within the model's context, or None."""
+        if not self.context_limit:
+            return None
+        used = len(self.tokenizer(self.render(query), add_special_tokens=False)["input_ids"])
+        if used + self.generation.max_new_tokens > self.context_limit:
+            return (f"query too long: {used} prompt tokens + {self.generation.max_new_tokens} new tokens "
+                    f"exceed the model's context of {self.context_limit}")
+        return None
 
     def generate(self, queries: list[dict]) -> list[str]:
         import torch
 
-        texts = [self.tokenizer.apply_chat_template(prompt.messages(self.system, q), tokenize=False,
-                                                    add_generation_prompt=True) for q in queries]
+        texts = [self.render(q) for q in queries]
         batch = self.tokenizer(texts, return_tensors="pt", padding=True, add_special_tokens=False).to(self.device)
         with torch.no_grad():
             out = self.model.generate(**batch, generation_config=self.generation)
@@ -69,6 +99,9 @@ class CheckModel:
         runnable = []
         for i, q in enumerate(queries):
             errors = prompt.query_errors(q)
+            if not errors:
+                too_long = self.length_error(q)
+                errors = [too_long] if too_long else []
             if errors:
                 results[i] = {"valid": False, "decision": None, "game_request": None, "note": None,
                               "errors": ["bad query: " + e for e in errors], "raw_output": None}

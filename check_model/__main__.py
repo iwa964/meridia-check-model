@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import secrets
 import sys
 import time
 from pathlib import Path
@@ -17,9 +18,10 @@ def _prepare(config: dict):
 
     rows, report = build(config)
     print(summary(report))
-    write(rows, report, config["data"]["prepared_dir"])
+    write(rows, report, config["data"]["prepared_dir"], splits=not report.errors)
     if report.errors:
-        print(f"\n{len(report.errors)} error(s): fix the source records above; nothing downstream will run.",
+        print(f"\n{len(report.errors)} error(s): fix the source records above; nothing downstream will run; "
+              "the split files from the last clean prepare are left as they were.",
               file=sys.stderr)
         sys.exit(1)
     return rows, report
@@ -33,7 +35,8 @@ def _require_training_stack() -> None:
 
 
 def _run_dir(config: dict, prefix: str) -> Path:
-    return Path(config["train"]["output_dir"]) / f"{prefix}-{time.strftime('%Y%m%d-%H%M%S')}"
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    return Path(config["train"]["output_dir"]) / f"{prefix}-{stamp}-{secrets.token_hex(3)}"
 
 
 def cmd_sync_catalog(args) -> None:

@@ -73,3 +73,33 @@ def test_train_save_reload_predict(tiny, tmp_path):
     assert set(result) == {"valid", "decision", "game_request", "note", "errors", "raw_output"}
     assert isinstance(result["raw_output"], str)
     assert result["valid"] == (result["decision"] is not None)
+
+
+def test_query_past_the_context_window_is_refused(tiny, tmp_path):
+    from check_model.infer import CheckModel
+    from check_model.train import train
+
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(tiny["dir"])
+    run = tmp_path / "run"
+    train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
+    model = CheckModel(run, max_new_tokens=8)
+    long_query = dict(tiny["rows"][0]["input"], scene="stone wall " * 5000)
+    result = model.predict(long_query)
+    assert result["valid"] is False and "query too long" in result["errors"][0]
+    with pytest.raises(FileExistsError):  # a run directory is never shared
+        train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
+
+
+def test_fp16_lora_keeps_the_adapter_in_fp32(tiny):
+    import peft
+    import torch
+    from transformers import AutoModelForCausalLM
+
+    from check_model.train import load_dtype
+
+    model = AutoModelForCausalLM.from_pretrained(tiny["dir"], dtype=getattr(torch, load_dtype("fp16", True)))
+    model = peft.get_peft_model(model, peft.LoraConfig(task_type="CAUSAL_LM", r=4, lora_alpha=8,
+                                                       target_modules="all-linear"))
+    assert {p.dtype for p in model.parameters() if p.requires_grad} == {torch.float32}
+    assert {p.dtype for p in model.parameters() if not p.requires_grad} == {torch.float16}

@@ -40,15 +40,15 @@ python -m check_model prepare --config configs/sft_example.yaml
 This writes `build/data/{train,val,test}.jsonl` and `build/data/report.json`, and prints a
 summary. Every source record lands in exactly one bucket:
 
-| Bucket | Meaning | 2026-09-23 (47 records; rerun `prepare` for current figures) |
+| Bucket | Meaning | 2026-09-23, dataset at db81744 (50 records; rerun `prepare` for current figures) |
 | --- | --- | --- |
-| trainable | a creator-labelled single check or confirmed no-roll | 37 |
+| trainable | a creator-labelled single check or confirmed no-roll | 40 |
 | eval_only | several accepted answers, none selected (`alternative_examples`) — scored against all of them, never trained on | 1 (000038) |
 | unsupported | labelled, in a form this version does not handle; the reason is listed | 6 |
 | pending / skipped | no usable label | 1 / 2 |
 | **errors** | a missing required field, a label outside the catalog, a duplicate id or input | 0 |
 
-**Errors stop the pipeline** and name the record (`ERROR dice_train_000001 (…:examples[0]): unknown
+**Errors stop the pipeline**, leave the last clean split files untouched, and name the record (`ERROR dice_train_000001 (…:examples[0]): unknown
 skill 'maintenance'`). A label is valid when the game would accept it: a skill must be a
 `SkillBank` row with a non-blank `initial` (the rule of `DialogueCheck.is_rollable_skill`), an
 attribute one of `check_turn.ATTRIBUTES`, a difficulty one of `success | hard | extreme`, and
@@ -56,9 +56,14 @@ the roll system `unidirectional`.
 
 **Splits.** General scenes → train / validation. `game_specific` scenes → the independent test
 set. Variations of one scenario share a group and never straddle splits. A group is formed by the
-dataset's `related_example_id` links, by `data.extra_groups`, and by TF-IDF similarity ≥
+dataset's `related_example_id` links, by `data.extra_groups`, and by TF-IDF similarity (over every
+language the record carries) ≥
 `near_duplicate_threshold`. The summary prints each similarity pair as `GROUPED a + b`: check
-them. A group's split comes from hashing its key, so adding examples never moves old ones.
+them. A group's split comes from hashing its key (its smallest id), so adding unrelated examples
+does not move old ones. It is not frozen: a new row that joins a group and sorts first, or a
+similarity merge, can move the group, and `prepare` prints a WARNING for every row whose split
+changed since the last run. Scores stay sound either way, since `evaluate` excludes every row a
+run trained on.
 
 ### When new examples are added
 
@@ -93,7 +98,7 @@ download. Its answers are noise.
 python -m check_model train --config configs/sft_example.yaml
 ```
 
-Each run gets its own directory `runs/<run_name>-<timestamp>/` containing:
+Each run gets its own directory `runs/<run_name>-<timestamp>-<random>/`, never shared, containing:
 
 - `model/` — the LoRA adapter, tokenizer and chat template
 - `catalog.json` — the label catalog the run was trained on
@@ -223,7 +228,7 @@ Run on 2026-09-23 in a cloud container: CPU only, no GPU, `huggingface.co` block
 | Loss masking and generation stopping | ✅ the tiny model memorises 4 targets exactly through the pipeline |
 | `train` / `evaluate` / `predict` commands | ✅ ran with the tiny model |
 | **The configured base models (Qwen2.5-0.5B / 1.5B-Instruct), their chat templates, GPU / bf16 training** | ❌ **not run**: the model download is blocked here |
-| **Whether the model learns the check rules** | ❌ not measurable yet: 37 trainable rows, no test set |
+| **Whether the model learns the check rules** | ❌ not measurable yet: 40 trainable rows, no test set |
 
 ## Open questions
 

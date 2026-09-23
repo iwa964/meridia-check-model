@@ -92,3 +92,13 @@ def test_near_duplicates_are_grouped_and_reported(catalog, subset, write_source)
     rows, report = split(catalog, [write_source(subset)], threshold=0.5)
     assert rows["dice_train_000900"].group == rows["dice_train_000001"].group
     assert any({p["a"], p["b"]} == {"dice_train_000001", "dice_train_000900"} for p in report.near_duplicates)
+
+
+def test_similarity_reads_every_language(catalog, subset, write_source):
+    # Same scene in Chinese, reworded in English: only the Chinese text says they are one.
+    variant = clone(subset, "dice_train_000001", "dice_train_000901")
+    variant["scene"]["en"] = "Wet masonry blocks a courtyard; nobody is chasing and there is no deadline."
+    variant["player_action"]["en"] = "Hand over hand I go up and over."
+    subset["examples"].append(variant)
+    rows, report = split(catalog, [write_source(subset)], threshold=0.4)
+    assert rows["dice_train_000901"].group == rows["dice_train_000001"].group

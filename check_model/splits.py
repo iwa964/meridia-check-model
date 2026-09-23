@@ -4,11 +4,15 @@
   and validation.
 * Rows that are variations of one scenario share a group, and a group never straddles
   two splits. A group is formed by the dataset's own `related_example_id` links, by
-  `extra_groups` in the config, and by text similarity (TF-IDF cosine over scene + action,
-  both languages) at or above `near_duplicate_threshold`. Every pair joined by similarity
+  `extra_groups` in the config, and by text similarity (TF-IDF cosine over scene + action in
+  every language the record carries, not just the one the prompt shows) at or above
+  `near_duplicate_threshold`. Every pair joined by similarity
   is listed in the report so a person can check it.
-* A group is assigned by hashing its key with `split_seed`, not by shuffling, so adding
-  new examples does not move old ones between train and validation.
+* A group is assigned by hashing its key (its smallest id) with `split_seed`, not by
+  shuffling, so adding unrelated examples does not move old ones. It is not frozen: a new row
+  that joins an existing group and sorts first, or a similarity merge (IDF shifts as data
+  grows), can change a group's key and move it. `prepare` warns about every row that moved
+  since the last run, and `evaluate` excludes trained rows whatever split they are in now.
 * A group holding an eval-only row goes to validation: the row cannot be trained on, and
   training on its siblings would leak it.
 """
@@ -64,7 +68,7 @@ class _Groups:
     def union(self, a: str, b: str) -> None:
         ra, rb = self.find(a), self.find(b)
         if ra != rb:
-            # The smaller id names the group, so a group's key is stable as rows join it.
+            # The smaller id names the group: stable while new rows sort after it.
             self.parent[max(ra, rb)] = min(ra, rb)
 
 
@@ -84,7 +88,7 @@ def assign_splits(rows: list[Row], report: Report, *, val_fraction: float, split
         for a, b in zip(group, group[1:]):
             groups.union(a, b)
     if near_duplicate_threshold is not None:
-        texts = {r.id: _text(r.input) for r in rows}
+        texts = {r.id: r.similarity_text or _text(r.input) for r in rows}
         for a, b, score in similar_pairs(texts, near_duplicate_threshold):
             groups.union(a, b)
             report.near_duplicates.append({"a": a, "b": b, "similarity": score})

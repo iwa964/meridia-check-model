@@ -25,13 +25,33 @@ def build(config: dict) -> tuple[list[Row], Report]:
         val_fraction=data["val_fraction"], split_seed=data["split_seed"],
         near_duplicate_threshold=data["near_duplicate_threshold"], extra_groups=data["extra_groups"],
     )
+    _note_moves(rows, report, data["prepared_dir"])
     return rows, report
 
 
-def write(rows: list[Row], report: Report, out_dir: str | Path) -> None:
+def _note_moves(rows: list[Row], report: Report, prepared_dir: str | Path) -> None:
+    """Warn about rows whose split differs from the last prepare. A split is not frozen: a new
+    row that joins an existing group (a link, or similarity -- whose IDF moves with the data)
+    can change the group's key and so its split. Scoring stays sound, since `evaluate`
+    excludes every row the run trained on; this makes the move visible for comparisons."""
+    before = {}
+    for split in ("train", "val", "test"):
+        path = Path(prepared_dir) / f"{split}.jsonl"
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    before[json.loads(line)["id"]] = split
+    for row in rows:
+        if row.id in before and before[row.id] != row.split:
+            report.warnings.append(f"{row.id} moved from {before[row.id]} to {row.split} since the last prepare")
+
+
+def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool = True) -> None:
+    """The report always; the split files only when `splits` -- a prepare with errors must not
+    replace the last clean split files with partial ones."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    for split in ("train", "val", "test"):
+    for split in ("train", "val", "test") if splits else ():
         with (out / f"{split}.jsonl").open("w", encoding="utf-8") as f:
             for row in rows:
                 if row.split == split:

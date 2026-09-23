@@ -103,6 +103,17 @@ def resolve_precision(requested: str) -> str:
     return "fp32"
 
 
+def load_dtype(precision: str, lora: bool) -> str:
+    """The dtype the base weights are loaded in. bf16 loads bf16. fp16 loads fp16 only under
+    LoRA, where the frozen base can sit in half precision while PEFT keeps the trainable adapter
+    in fp32; a full fine-tune under fp16 AMP needs fp32 master weights."""
+    if precision == "bf16":
+        return "bfloat16"
+    if precision == "fp16" and lora:
+        return "float16"
+    return "float32"
+
+
 def load_tokenizer(name_or_path: str, revision: str | None, trust_remote_code: bool):
     from transformers import AutoTokenizer
 
@@ -125,7 +136,7 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
 
     model_cfg, lora_cfg, train_cfg = config["model"], config["lora"], config["train"]
     run_dir = Path(run_dir)
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=False)  # two runs never write into one directory
     transformers.set_seed(config["seed"])
 
     catalog = load_catalog(config["data"]["catalog"])
@@ -139,7 +150,7 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
     model = AutoModelForCausalLM.from_pretrained(
         model_cfg["base_model"], revision=model_cfg["revision"],
         trust_remote_code=model_cfg["trust_remote_code"],
-        dtype=torch.bfloat16 if precision == "bf16" else torch.float32,
+        dtype=getattr(torch, load_dtype(precision, lora_cfg["enabled"])),
     )
     if train_cfg["gradient_checkpointing"]:
         model.gradient_checkpointing_enable()
