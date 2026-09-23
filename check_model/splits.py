@@ -42,7 +42,9 @@ def similar_pairs(texts: dict[str, str], threshold: float) -> list[tuple[str, st
     vectors = {}
     for i in ids:
         counts = Counter(tokens[i])
-        v = {t: c * math.log(n / df[t]) for t, c in counts.items()}
+        # Smoothed IDF (never zero): with a raw log(n/df), a term in every row weighs nothing,
+        # so in a small corpus two near-identical rows could score 0.
+        v = {t: c * (math.log((1 + n) / (1 + df[t])) + 1) for t, c in counts.items()}
         norm = math.sqrt(sum(x * x for x in v.values())) or 1.0
         vectors[i] = {t: x / norm for t, x in v.items()}
     out = []
@@ -80,11 +82,20 @@ def _in_validation(group: str, seed: int | str, fraction: float) -> bool:
 def assign_splits(rows: list[Row], report: Report, *, val_fraction: float, split_seed: int | str,
                   near_duplicate_threshold: float | None, extra_groups: list[list[str]]) -> None:
     groups = _Groups()
+    known = set(report.all_ids)
     for rid, links in report.all_ids.items():
         groups.find(rid)
         for other in links:
-            groups.union(rid, other)
+            if other in known:
+                groups.union(rid, other)
+            else:
+                report.warnings.append(f"{rid} links to {other}, which is in no source; the link is ignored")
     for group in extra_groups:
+        unknown = [i for i in group if i not in known]
+        if unknown:
+            report.errors.append({"source": "config data.extra_groups", "id": None,
+                                  "message": f"group {group} names ids in no source: {unknown}"})
+            continue
         for a, b in zip(group, group[1:]):
             groups.union(a, b)
     if near_duplicate_threshold is not None:

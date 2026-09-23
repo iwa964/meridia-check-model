@@ -33,6 +33,15 @@ def check_format(manifest: dict) -> None:
                          "retrain, or load it with the code version that trained it")
 
 
+def serving_dtype(precision: str, device: str):
+    """The dtype a run is served in: its training half precision on any CUDA device (indexed
+    or not), fp32 otherwise."""
+    import torch
+
+    half = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(precision)
+    return half if half is not None and torch.device(device).type == "cuda" else torch.float32
+
+
 class CheckModel:
     def __init__(self, run_dir: str | Path, *, max_new_tokens: int = 64, device: str | None = None):
         import torch
@@ -46,8 +55,7 @@ class CheckModel:
         model_dir = self.run_dir / "model"
         base = self.manifest["base_model"]
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        half = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(self.manifest["precision"])
-        dtype = half if half is not None and self.device == "cuda" else torch.float32
+        dtype = serving_dtype(self.manifest["precision"], self.device)
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
         self.tokenizer.padding_side = "left"  # decoder-only batch generation

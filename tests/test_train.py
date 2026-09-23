@@ -103,3 +103,35 @@ def test_fp16_lora_keeps_the_adapter_in_fp32(tiny):
                                                        target_modules="all-linear"))
     assert {p.dtype for p in model.parameters() if p.requires_grad} == {torch.float32}
     assert {p.dtype for p in model.parameters() if not p.requires_grad} == {torch.float16}
+
+
+@pytest.mark.parametrize("precision, device, dtype", [
+    ("bf16", "cuda:1", "bfloat16"), ("fp16", "cuda:0", "float16"), ("bf16", "cuda", "bfloat16"),
+    ("bf16", "cpu", "float32"), ("fp32", "cuda:1", "float32"),
+])
+def test_serving_dtype_on_any_cuda_device(precision, device, dtype):
+    import torch
+
+    from check_model.infer import serving_dtype
+
+    assert serving_dtype(precision, device) is getattr(torch, dtype)
+
+
+def test_each_tiny_smoke_run_keeps_its_own_base(tmp_path, monkeypatch):
+    import yaml
+
+    from check_model.__main__ import main
+
+    root = Path(__file__).resolve().parent.parent
+    cfg = tmp_path / "smoke.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(SUBSET)], "catalog": str(root / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "build" / "data")},
+        "train": {"output_dir": str(tmp_path / "runs"), "per_device_train_batch_size": 2},
+        "smoke": {"max_steps": 1}}), encoding="utf-8")
+    main(["smoke", "--config", str(cfg), "--tiny"])
+    main(["smoke", "--config", str(cfg), "--tiny"])
+    bases = [json.loads(m.read_text())["base_model"]["name_or_path"]
+             for m in sorted((tmp_path / "runs").glob("*/run_manifest.json"))]
+    assert len(bases) == 2 and bases[0] != bases[1]
+    assert all(Path(b, "config.json").exists() for b in bases)

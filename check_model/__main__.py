@@ -132,7 +132,9 @@ def cmd_smoke(args) -> None:
     if args.tiny:
         from .tiny import make_tiny_model
 
-        tiny_dir = Path(config["data"]["prepared_dir"]).parent / "tiny-random-model"
+        # One base per run: the run's manifest names this path, and a shared path would be
+        # overwritten by the next smoke run's fresh random weights.
+        tiny_dir = Path(config["data"]["prepared_dir"]).parent / f"tiny-random-model-{secrets.token_hex(3)}"
         system = prompt.system_prompt(load_catalog(config["data"]["catalog"]))
         make_tiny_model(tiny_dir, [r.to_json() for r in rows], system)
         config = copy.deepcopy(config)

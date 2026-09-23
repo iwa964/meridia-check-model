@@ -249,7 +249,12 @@ def _classify(record: dict, kind: str, catalog: Catalog, lang: str) -> tuple[dic
         # would train on a label nobody confirmed.
         raise _Skip("unsupported", "selected_alternative is set, and its format is not defined yet")
     options = []
-    for option in annotation.get("alternatives") or []:
+    alternatives = annotation.get("alternatives")
+    if not isinstance(alternatives, list):
+        raise _Invalid("alternatives must be a list")
+    for option in alternatives:
+        if not isinstance(option, dict):
+            raise _Invalid(f"each alternative must be an object, got {option!r}")
         sub = dict(annotation, checks=option.get("checks"), check_mode=option.get("check_mode", annotation.get("check_mode")))
         options.append(_single_checks(sub, catalog))
     if len(options) < 2:

@@ -18,7 +18,7 @@ DEFAULTS: dict = {
         "prepared_dir": "build/data",
         "val_fraction": 0.2,
         "split_seed": 0,  # separate from `seed`, so changing the training seed keeps the split
-        "near_duplicate_threshold": 0.28,  # null turns similarity grouping off; see configs/sft_example.yaml
+        "near_duplicate_threshold": 0.38,  # null turns similarity grouping off; see configs/sft_example.yaml
         "extra_groups": [],  # [[id, id, ...], ...] scenario variations to keep together
     },
     "model": {

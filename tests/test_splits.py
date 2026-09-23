@@ -102,3 +102,23 @@ def test_similarity_reads_every_language(catalog, subset, write_source):
     subset["examples"].append(variant)
     rows, report = split(catalog, [write_source(subset)], threshold=0.4)
     assert rows["dice_train_000901"].group == rows["dice_train_000001"].group
+
+
+def test_terms_shared_by_every_row_still_count():
+    # Two rows only: every shared term is in every row. A raw log(n/df) weighs them 0.
+    texts = {"a": "locked wooden chest try left", "b": "locked wooden chest try right"}
+    assert similar_pairs(texts, 0.38) and similar_pairs(texts, 0.38)[0][2] > 0.5
+
+
+def test_unknown_ids_never_join_a_group(catalog, subset, write_source):
+    _, report = split(catalog, [SUBSET], extra=[("dice_train_000001", "dice_train_00001")])
+    assert any("names ids in no source" in e["message"] and "dice_train_00001" in e["message"]
+               for e in report.errors)
+    # A dangling dataset link is reported and ignored; it cannot become the group's key.
+    variant = clone(subset, "dice_train_000002", "dice_train_000960")
+    variant["scene"]["en"] = "Another reading room. " + variant["scene"]["en"]
+    variant["related_example_id"] = "dice_train_000000"
+    subset["examples"].append(variant)
+    rows, report = split(catalog, [write_source(subset)])
+    assert rows["dice_train_000960"].group == "dice_train_000960"
+    assert any("links to dice_train_000000" in w for w in report.warnings)

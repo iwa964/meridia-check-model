@@ -244,7 +244,7 @@ Run on 2026-09-23 in a cloud container: CPU only, no GPU, `huggingface.co` block
   is not defined in `annotation_policy`, whose default covers "one skill and a difficulty". The
   rows are used because the recorded `roll_system` is `unidirectional`.
 - **Auto-grouped near-duplicates** (000005 + 000042, 000010 + 000043, 000032 + 000046) should be
-  confirmed as variations of one scenario, or kept apart with a lower threshold.
+  confirmed as variations of one scenario, or kept apart by raising the threshold.
 - **Runtime inputs are not captured.** `task_scope.runtime_evaluation_ready` is false: the
   records carry no NPC, dialogue history or player `check_rows`. The input format above is the
   annotation's own, and no game code sends it yet.

@@ -93,7 +93,12 @@ class Collator:
                 "attention_mask": torch.tensor(mask)}
 
 
+PRECISIONS = ("auto", "bf16", "fp16", "fp32")
+
+
 def resolve_precision(requested: str) -> str:
+    if requested not in PRECISIONS:
+        raise ValueError(f"train.precision must be one of {PRECISIONS}, got {requested!r}")
     import torch
 
     if requested != "auto":

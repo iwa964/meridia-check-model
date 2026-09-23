@@ -136,3 +136,13 @@ def test_catalog_version_mismatch_is_a_warning(catalog, subset, write_source):
     subset["skill_catalog"]["blob_sha"] = "0" * 40
     _, report = load(catalog, write_source(subset))
     assert report.errors == [] and any("0" * 40 in w for w in report.warnings)
+
+
+@pytest.mark.parametrize("alternatives, expected", [
+    ([None, {"checks": []}], "each alternative must be an object"),
+    ("Economics or Mathematics", "alternatives must be a list"),
+])
+def test_malformed_alternatives_are_named_not_crashed(catalog, subset, write_source, alternatives, expected):
+    record(subset, "dice_train_000038")["annotation"]["alternatives"] = alternatives
+    _, report = load(catalog, write_source(subset))
+    assert any(i == "dice_train_000038" and expected in m for i, m in messages(report)), messages(report)

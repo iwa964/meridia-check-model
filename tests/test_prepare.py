@@ -9,7 +9,7 @@ from check_model.__main__ import main
 from check_model.config import load_config
 from check_model.infer import base_revision, check_format
 from check_model.prepare import build
-from check_model.train import load_dtype
+from check_model.train import load_dtype, resolve_precision
 
 ROOT = Path(__file__).resolve().parent.parent
 SUBSET = ROOT / "tests" / "fixtures" / "dice_subset.json"
@@ -62,3 +62,8 @@ def test_a_run_in_another_prompt_format_is_refused():
 ])
 def test_load_dtype(precision, lora, dtype):
     assert load_dtype(precision, lora) == dtype
+
+
+def test_an_unknown_precision_is_refused():
+    with pytest.raises(ValueError, match="fp116"):
+        resolve_precision("fp116")
