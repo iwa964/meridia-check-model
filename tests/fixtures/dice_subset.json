@@ -1,0 +1,605 @@
+{
+  "_fixture": "Verbatim records copied from training_files/dice_rolling_train.json (PR #1, commit c5bb981) for the adapter tests. Not training data.",
+  "schema_version": "1.0",
+  "dataset_name": "dice_rolling_train",
+  "scenario_scope": "general",
+  "split": "train",
+  "skill_catalog": {
+    "blob_sha": "53680ef911cffd3f78ed4ef338f62adbd3405bea",
+    "path": "Scripts/profile/skill/SkillBank.gd",
+    "repository": "iwa964/MeridiaGame"
+  },
+  "attribute_catalog": {
+    "repository": "iwa964/MeridiaGame",
+    "path": "server/check_turn.py",
+    "blob_sha": "4db9cc484cae1548448824f353e31a211e859c3e",
+    "definition": "ATTRIBUTES"
+  },
+  "examples": [
+    {
+      "annotation": {
+        "checks": [
+          {
+            "difficulty": "extreme",
+            "kind": "skill",
+            "name": "Climbing",
+            "roll_system": "unidirectional",
+            "roll_system_source": "creator_default"
+          }
+        ],
+        "rationale": null,
+        "raw_response": "极难攀爬",
+        "roll_required": true
+      },
+      "id": "dice_train_000001",
+      "player_action": {
+        "en": "I grip the gaps between the stones, climb to the top with my bare hands, and get over into the courtyard.",
+        "zh": "我抓住石缝，徒手爬上墙顶，再翻进院子。"
+      },
+      "scene": {
+        "en": "The rain has just stopped. An uninjured character in normal physical condition stands outside a stone wall about three metres high and wants to get into the courtyard. The wall is slippery, but gaps between the stones offer handholds and footholds. The character has no rope or ladder and no companion to help. There is no pursuit or time limit. Losing their grip during the climb could cause a fall.",
+        "zh": "雨刚停。一名身体正常、没有受伤的角色站在一堵约三米高的石墙外，想翻墙进入院子。石墙表面湿滑，但石块之间有可供手脚抓踩的缝隙。角色没有绳索或梯子，也没有同伴协助；现场没有追兵或时间限制。攀爬途中失手可能导致摔落。"
+      }
+    },
+    {
+      "annotation": {
+        "checks": [
+          {
+            "difficulty": "success",
+            "kind": "skill",
+            "name": "Investigation",
+            "roll_system": "unidirectional",
+            "roll_system_source": "creator_default"
+          }
+        ],
+        "rationale": null,
+        "raw_response": "normal investigation",
+        "roll_required": true
+      },
+      "id": "dice_train_000002",
+      "player_action": {
+        "en": "I reach out, pick up the book on the desk, and look at its cover.",
+        "zh": "我伸手拿起桌上的书，看看封面。"
+      },
+      "scene": {
+        "en": "An uninjured character in normal physical condition stands in a quiet, well-lit public reading room. A book lies on an ordinary desk within easy reach. Readers are allowed to pick up the books on the desks. Nobody is stopping the character, and there is no time limit.",
+        "zh": "一名身体正常、没有受伤的角色站在安静、光线充足的公共阅览室里。一张普通书桌上放着一本书，距离角色伸手可及。阅览室允许读者自行取阅桌上的书，现场没有人阻拦，也没有时间限制。"
+      }
+    },
+    {
+      "id": "dice_train_000021",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "角色独自一人、没有受伤，当前不在战斗中，脚下地面干燥平整。通向房间的厚重木门没有上锁或闩住，但被变形的门框卡住；走廊里的烟雾正在向角色所在位置蔓延。",
+        "en": "The character is alone, uninjured, and outside combat, standing on dry, level flooring. A heavy wooden door leading into a room is unlocked and unlatched but jammed by its warped frame; smoke is spreading along the corridor toward the character."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色用双臂和肩膀向门施力，试图推开它，没有使用工具；门是否被推开尚未结算。",
+        "en": "The character presses against the door with their arms and shoulder, attempting to push it open without tools; whether the door yields remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "普通力量",
+        "roll_required": true,
+        "checks": [
+          {
+            "kind": "attribute",
+            "name": "STR",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "contextual_default"
+          }
+        ],
+        "rationale": null
+      }
+    },
+    {
+      "id": "dice_train_000028",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。角色正在协助博物馆整理一面年代标签遗失的旧军旗。旗上的王室徽记、统治者姓名和军团番号仍清晰可辨。角色曾系统学习这个地区的历史，但已经数年没有接触相关资料；现场没有可查阅的史书。馆员需要先判断军旗属于哪个统治时期，才能安排后续档案检索。",
+        "en": "Outside combat, the character is helping a museum catalogue an old military banner whose date label is missing. Its royal emblem, ruler's name, and regiment number remain clearly legible. The character formally studied this region's history several years ago but has not consulted the subject recently; no history books are available on site. The curator needs an initial identification of the banner's reign to direct the subsequent archive search."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色正在仔细查看旗上的姓名与徽记，将它们与自己记得的统治者更替和军团沿革对照，尝试判断军旗所属的统治时期；判断是否正确尚未结算。",
+        "en": "The character examines the name and emblem, comparing them with their recollection of successive rulers and regimental history to identify the reign the banner belongs to. Whether the identification is correct remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "等下。所以玩家只是看年份，没有找东西。如果不找东西那就是纯普通历史。找东西就是普通历史+普通阅读（某国家当时统治时期的语言）",
+        "roll_required": true,
+        "checks": [
+          {
+            "kind": "skill",
+            "name": "History",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "creator_default"
+          }
+        ],
+        "rationale": null,
+        "check_mode": "single",
+        "clarifications": [
+          {
+            "raw_response": "28单项 29双项啊",
+            "check_mode": "single"
+          }
+        ]
+      },
+      "creator_guidance": [
+        {
+          "raw_response": "不。需要查阅的那个case直接生成000029",
+          "scope": "example_separation",
+          "rule": {
+            "zh": "本条对应不查阅资料、仅凭已有历史知识判断年代的情况；查阅资料的情况单独保存为 dice_train_000029。",
+            "en": "This example covers identifying the period from existing historical knowledge without consulting records. The record-consultation case is stored separately as dice_train_000029."
+          },
+          "related_example_id": "dice_train_000029"
+        }
+      ]
+    },
+    {
+      "id": "dice_train_000033",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。角色正在参加餐馆厨师的试工，需要在十五分钟内同时交出四份煎鱼配热酱汁。鱼片已经去骨，食材新鲜，配方和分量明确；三个炉头、两口煎锅、一只小锅及其他厨具均可正常使用。主厨要求鱼肉熟透但保持嫩度、鱼皮酥脆，酱汁不能油水分离；成品质量将决定是否录用。",
+        "en": "Outside combat, the character is taking a restaurant cooking trial and must serve four portions of pan-fried fish with warm sauce together within fifteen minutes. The fillets are deboned, the ingredients are fresh, and the recipe and quantities are clear. Three burners, two frying pans, a saucepan, and the other utensils are in working order. The head chef requires fully cooked but tender fish, crisp skin, and sauce that has not separated; the finished dishes will determine whether the character is hired."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色已经将鱼片下锅，正在调整火力、判断翻面时机，并同时搅拌加热酱汁；能否按时完成四份符合要求的菜品尚未结算。",
+        "en": "The character has placed the fillets in the pans and is adjusting the heat and judging when to turn them while stirring and heating the sauce. Whether all four dishes meet the requirements and are ready on time remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "33改成普通cooking。然后34普通数学",
+        "roll_required": true,
+        "check_mode": "single",
+        "checks": [
+          {
+            "kind": "skill",
+            "name": "Cooking",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "creator_default"
+          }
+        ],
+        "rationale": null
+      },
+      "annotation_history": [
+        {
+          "annotation": {
+            "raw_response": "困难cooking",
+            "roll_required": true,
+            "check_mode": "single",
+            "checks": [
+              {
+                "kind": "skill",
+                "name": "Cooking",
+                "difficulty": "hard",
+                "roll_system": "unidirectional",
+                "roll_system_source": "creator_default"
+              }
+            ],
+            "rationale": null
+          },
+          "correction_raw": "33改成普通cooking。然后34普通数学"
+        }
+      ]
+    },
+    {
+      "id": "dice_train_000040",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。角色需要将一条紧急口信送到运河对岸的船坞，收信人的货船将在五分钟后离岸；绕路过桥需要二十分钟。运河宽二十米、水深三米，水流缓慢，水温约二十摄氏度，两岸都有延伸入水的石阶。角色没有受伤或明显疲劳，穿着轻便衣物，没有携带行李，也没有绳索或漂浮物辅助。",
+        "en": "Outside combat, the character needs to deliver an urgent verbal message to a dock across a canal. The recipient's cargo boat departs in five minutes; reaching it by the nearest bridge would take twenty minutes. The canal is twenty metres wide and three metres deep, with a slow current and water around twenty degrees Celsius. Stone steps extend into the water on both banks. The character is uninjured, has no significant fatigue, wears light clothing, and carries no luggage. No rope or flotation aid is available."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色已从石阶入水，开始向对岸石阶游去；能否在货船离岸前游到对岸尚未结算。",
+        "en": "The character has entered the water from the steps and begun swimming toward the steps on the opposite bank. Whether they reach the far bank before the boat departs remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "那很简单了。。。。这种感觉小学生都能做。。。。。但是水深的话其实可以加大失败作为妨碍的方法。也算是个没必要投掷但是可以加投掷的。。。",
+        "roll_required": false,
+        "roll_optional": true,
+        "checks": [],
+        "optional_roll": {
+          "status": "allowed_parameters_unspecified",
+          "checks": null,
+          "failure_guidance_raw": "但是水深的话其实可以加大失败作为妨碍的方法。",
+          "consequence_details": null
+        },
+        "rationale": "那很简单了。。。。这种感觉小学生都能做。。。。。"
+      },
+      "clarifications": [
+        {
+          "question_raw": "玩家要游多远？",
+          "answer": {
+            "zh": "约20米，从这一侧的石阶横渡到对岸石阶。",
+            "en": "About twenty metres, crossing from the steps on this bank to the steps on the opposite bank."
+          }
+        },
+        {
+          "question_raw": "时限多少？",
+          "answer": {
+            "zh": "5分钟，货船会在五分钟后离岸。",
+            "en": "Five minutes; the cargo boat departs in five minutes."
+          }
+        }
+      ]
+    },
+    {
+      "id": "dice_train_000044",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。仓库管理员委托角色设计一条临时木坡道，连接地面与高出地面80厘米的平台，供搬运工步行运货。可用空地长6米、宽1.5米，地面平整坚实，坡道需要同时承受最多300公斤的人与货物。现有木板、木梁和连接件完好，尺寸、材料及允许承载数据都有记录。角色有纸笔、尺子和两小时绘制方案，之后由木工按图施工。",
+        "en": "Outside combat, a warehouse manager commissions the character to design a temporary wooden ramp connecting level ground to a platform 80 centimetres higher, for workers carrying goods on foot. The available space is 6 metres long and 1.5 metres wide, with firm, level ground. The ramp must support up to 300 kilograms of people and goods at once. The available boards, beams, and connectors are sound, with documented dimensions, materials, and allowable loads. The character has paper, a ruler, and two hours to draw a plan for carpenters to build."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色已经开始绘制坡道及支撑结构的布置，结合材料记录检查方案能否满足载荷与场地要求；设计是否可行尚未结算。",
+        "en": "The character has begun drawing the ramp and its supports, checking the material records to assess whether the plan meets the load and space requirements. Whether the design is viable remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "那同时过普通工程+普通绘画",
+        "roll_required": true,
+        "check_mode": "pair",
+        "checks": [
+          {
+            "kind": "skill",
+            "name": "Engineering",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "project_pair_definition"
+          },
+          {
+            "kind": "skill",
+            "name": "Drawing",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "project_pair_definition"
+          }
+        ],
+        "rationale": null
+      },
+      "clarifications": [
+        {
+          "question_raw": "我们有普通设计吗",
+          "answer": {
+            "zh": "当前技能表没有独立的设计技能；相关技能包括 Engineering（工程学）、Drawing（绘画）和 Carpentry（木工）。本场景的结构设计可以对应 Engineering，最终检定由创作者标注。",
+            "en": "The current catalog has no standalone Design skill. Related skills include Engineering, Drawing, and Carpentry. The structural design in this scene can correspond to Engineering; the creator supplies the final check label."
+          }
+        }
+      ]
+    }
+  ],
+  "alternative_examples": [
+    {
+      "id": "dice_train_000038",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。城镇粮商委托角色分析近四周面粉价格上涨的主要原因，以安排下一批采购。桌上有按周整理的进货量、库存、销量、成交均价，以及当地面包坊的订单记录；数据完整、已经核实，使用相同的计量单位。角色有一小时阅读和比较这些资料。",
+        "en": "Outside combat, a town grain merchant asks the character to identify the main cause of rising flour prices over the past four weeks, to inform the next purchase. Weekly delivery volumes, inventories, sales volumes, average transaction prices, and local bakery orders are available. The records are complete, verified, and use consistent units. The character has one hour to examine and compare them."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色正在对照价格变化与各周的进货、库存和订单记录，判断涨价主要来自供应减少还是需求增加，并整理依据；分析是否正确尚未结算。",
+        "en": "The character is comparing price changes with weekly deliveries, inventories, and orders to determine whether reduced supply or increased demand is the main cause, and is organizing the supporting evidence. Whether the analysis is correct remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "普通经济或者普通数学",
+        "roll_required": true,
+        "check_mode": "single",
+        "choice": "one_of",
+        "alternatives": [
+          {
+            "checks": [
+              {
+                "kind": "skill",
+                "name": "Economics",
+                "difficulty": "success",
+                "roll_system": "unidirectional",
+                "roll_system_source": "creator_default"
+              }
+            ]
+          },
+          {
+            "checks": [
+              {
+                "kind": "skill",
+                "name": "Mathematics",
+                "difficulty": "success",
+                "roll_system": "unidirectional",
+                "roll_system_source": "creator_default"
+              }
+            ]
+          }
+        ],
+        "selected_alternative": null,
+        "rationale": null
+      }
+    }
+  ],
+  "pending_examples": [
+    {
+      "id": "dice_train_000047",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。角色需要在四十五分钟内，照着一把完好的原钥匙制作备用钥匙。桌上有尺寸匹配的黄铜钥匙坯、台钳、几种细锉和游标卡尺，但没有自动配钥匙机。这把钥匙的一侧有五处深浅不同的齿口；对应的锁就在旁边，可以随时试配。工作台照明充足，角色没有受伤。",
+        "en": "Outside combat, the character has forty-five minutes to make a spare key using an intact original as a model. The workbench has a matching brass key blank, a vise, several fine files, and a vernier caliper, but no automatic key-cutting machine. The key has five cuts of different depths along one edge. The matching lock is nearby and available for test fitting. The workbench is well lit, and the character is uninjured."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色已经测量原钥匙、在钥匙坯上标出齿口位置，并开始夹住钥匙坯逐处锉削；能否在时限内做出可靠开锁的备用钥匙尚未确定。",
+        "en": "The character has measured the original key, marked the cut positions on the blank, and begun filing the cuts with the blank secured in the vise. Whether they can produce a spare that reliably opens the lock within the time limit remains unresolved."
+      },
+      "annotation": null
+    }
+  ],
+  "skipped_examples": [
+    {
+      "annotation": null,
+      "id": "dice_train_000015",
+      "player_action": {
+        "en": "I sing the familiar song without accompaniment, hoping the guests will enjoy it.",
+        "zh": "我不借助伴奏，唱起这首熟悉的歌，希望让客人们听得开心。"
+      },
+      "scene": {
+        "en": "At a small inn, the character agrees to sing a familiar song for several willing listeners, and the room is quiet enough for everyone to hear. Their voice is in its usual condition, with no deadline or pressure to perform.",
+        "zh": "在一家小旅店里，角色答应为几位愿意听歌的客人唱一首熟悉的歌，房间安静得足以听清歌声。角色嗓音状态正常，没有时间限制，也没有人强迫其表演。"
+      },
+      "skip_reason_raw": "换一个sample，这个有点处于要投掷和不要的边缘"
+    }
+  ],
+  "conditional_examples": [
+    {
+      "id": "dice_train_000019",
+      "scene": {
+        "zh": "城门守卫持有角色的准确画像，正在检查行人，认出角色就会拦下。本例补充的目标身份是一名普通进城旅人。角色已经穿上粗布上衣、旧斗篷和旅行靴；这套衣服在本例中的描述标签为「旅人装束」「朴素」「有磨损」。角色是否已经化妆分别按两个条件分支处理。",
+        "en": "A gate guard has an accurate portrait of the character and is checking passersby, stopping them if recognized. The intended identity specified for this example is an ordinary traveler entering town. The character is wearing a coarse-cloth shirt, an old cloak, and traveling boots; the outfit's descriptive labels for this example are traveler attire, plain, and worn. Whether makeup has been applied is handled by two separate conditional branches."
+      },
+      "annotation": {
+        "raw_response": "你这个场景不够细节，角色是要扮演成谁呢。然后就是对于端口来说玩家不是靠这个说来去判断的。而是玩家换上带有具体标签的衣服从士兵眼前走过的时候过普通乔装。如果说没有化妆就是困难乔装",
+        "scope": "dice_train_000019",
+        "roll_required": true,
+        "trigger": {
+          "zh": "角色穿着这套带标签的衣服从士兵眼前走过，进入士兵可观察的范围；是否被认出尚未结算。",
+          "en": "The character walks past the soldier wearing the tagged outfit and enters the soldier's observable range; recognition has not yet been resolved."
+        },
+        "conditional_checks": [
+          {
+            "when": {
+              "makeup_applied": true
+            },
+            "checks": [
+              {
+                "kind": "skill",
+                "name": "Disguise",
+                "difficulty": "success",
+                "roll_system": "unidirectional",
+                "roll_system_source": "creator_default"
+              }
+            ]
+          },
+          {
+            "when": {
+              "makeup_applied": false
+            },
+            "checks": [
+              {
+                "kind": "skill",
+                "name": "Disguise",
+                "difficulty": "hard",
+                "roll_system": "unidirectional",
+                "roll_system_source": "creator_default"
+              }
+            ]
+          }
+        ],
+        "rationale": null
+      },
+      "original_presentation": {
+        "scene": {
+          "zh": "城门守卫持有角色的准确画像，正在检查过往行人，认出角色后就会拦下。角色有普通衣物、假发、化妆用品和镜子，也有时间准备，但没有伪造证件。",
+          "en": "A gate guard has an accurate portrait of the character and is checking passersby, ready to stop them if recognized. The character has ordinary clothes, a wig, makeup, a mirror, and time to prepare, but no forged papers."
+        },
+        "player_action": {
+          "zh": "我利用手边的衣物和用品改变外表，试着通过城门而不被守卫认出来。",
+          "en": "I change my appearance using the clothes and supplies available, then try to pass through the gate without the guard recognizing me."
+        }
+      },
+      "input_mode": "conditional_observed_event",
+      "appearance_state": {
+        "intended_identity": {
+          "zh": "普通进城旅人",
+          "en": "ordinary traveler entering town"
+        },
+        "clothing_tags": {
+          "zh": [
+            "旅人装束",
+            "朴素",
+            "有磨损"
+          ],
+          "en": [
+            "traveler attire",
+            "plain",
+            "worn"
+          ]
+        },
+        "makeup_applied": null
+      },
+      "scenario_detail_provenance": {
+        "intended_identity_and_clothing_tags": "Assistant-authored clarification of this general scene, not creator-specified identity or existing runtime tag identifiers.",
+        "makeup_state": "Unspecified for the shared scene. Each creator-labeled branch supplies its own condition; carrying makeup or wearing a wig does not establish makeup application."
+      },
+      "observed_event": {
+        "zh": "角色穿着这套带标签的衣服从士兵眼前走过，进入士兵可观察的范围；是否被认出尚未结算。",
+        "en": "The character walks past the soldier wearing the tagged outfit and enters the soldier's observable range; recognition has not yet been resolved."
+      }
+    }
+  ],
+  "parameterized_examples": [
+    {
+      "id": "dice_train_000029",
+      "input_mode": "observed_event",
+      "related_example_id": "dice_train_000028",
+      "scene": {
+        "zh": "当前不在战斗中。角色需要确定一面旧军旗所属的统治时期，旗上的徽记与军团番号清晰可辨。这次角色已经进入博物馆档案室，桌上放着来自该国几个统治时期的军团名册和授旗记录；资料完整，字迹可辨，室内照明充足。相关记录使用该国在所记载统治时期使用的书面语言；本通用场景尚未指定国家与具体语言。",
+        "en": "Outside combat, the character needs to establish which reign an old military banner belongs to; its emblem and regiment number are clearly legible. In this case, the character has entered the museum archive, where regimental registers and records of banner presentations from several reigns of that country lie on the table. The documents are intact and legible, and the room is well lit. The relevant records use the written language of that country during the reign they document; the country and specific language have not been assigned in this general scene."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色已经开始翻阅名册与授旗记录，阅读其中的军团名称、日期和事件记载，并与旗上的线索及自己掌握的历史知识对照，查找能够确定军旗年代的条目；能否正确找到并理解相关条目尚未结算。",
+        "en": "The character has begun consulting the registers and banner records, reading regiment names, dates, and accounts of events and comparing them with the banner's clues and their historical knowledge to find an entry that establishes its period. Whether they correctly locate and understand the relevant entry remains unresolved."
+      },
+      "reading_context": {
+        "country": null,
+        "language": null,
+        "language_selection_rule": {
+          "zh": "所查文献所属国家在相应统治时期使用的语言。",
+          "en": "The language used in the documents' country during the relevant reign."
+        }
+      },
+      "annotation": {
+        "raw_response": "那么按照之前说的，就是普通历史+普通阅读（某国家当时统治时期的语言）",
+        "clarifications": [
+          {
+            "raw_response": "28单项 29双项啊",
+            "check_mode": "pair"
+          }
+        ],
+        "roll_required": true,
+        "check_mode": "pair",
+        "checks": [
+          {
+            "kind": "skill",
+            "name": "History",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "project_pair_definition"
+          },
+          {
+            "kind": "skill",
+            "name": null,
+            "skill_selector": {
+              "catalog_category": "languages",
+              "description_zh": "所查文献所属国家在相应统治时期使用的语言技能。",
+              "description_en": "The language skill matching the documents' country and historical reign."
+            },
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "project_pair_definition"
+          }
+        ],
+        "rationale": null
+      },
+      "annotation_attempts": [
+        {
+          "raw_response": "等下。所以玩家只是看年份，没有找东西。如果不找东西那就是纯普通历史。找东西就是普通历史+普通阅读（某国家当时统治时期的语言）",
+          "source_instruction_raw": "不。需要查阅的那个case直接生成000029",
+          "roll_required": true,
+          "requested_checks": [
+            {
+              "kind": "skill",
+              "name": "History",
+              "difficulty": "success",
+              "roll_system": null
+            },
+            {
+              "kind": "skill",
+              "name": null,
+              "requested_skill": "阅读",
+              "language_context": "某国家当时统治时期的语言",
+              "difficulty": "success",
+              "roll_system": null
+            }
+          ],
+          "validation_status": "incomplete_annotation",
+          "unresolved_fields": [
+            "reading_language_skill",
+            "roll_system"
+          ],
+          "validation_note": {
+            "zh": "History 已匹配当前技能表。当前技能表没有独立的 Reading 项，而是具体语言技能；国家、文献语言及其对应技能尚未确定。创作者此前的默认单向规则明确适用于一个技能加难度，本条两项检定的投掷制度待补充。",
+            "en": "History matches the current catalog. There is no standalone Reading entry; the catalog has specific language skills. The country, document language, and corresponding skill remain unspecified. The creator's explicit unidirectional default covers one skill plus difficulty; the roll system for this two-check label remains to be supplied."
+          }
+        },
+        {
+          "raw_response": "那么按照之前说的，就是普通历史+普通阅读（某国家当时统治时期的语言）",
+          "roll_required": true,
+          "requested_checks": [
+            {
+              "kind": "skill",
+              "name": "History",
+              "difficulty": "success",
+              "roll_system": null
+            },
+            {
+              "kind": "skill",
+              "name": null,
+              "requested_skill": "阅读",
+              "difficulty": "success",
+              "roll_system": null,
+              "skill_selector": {
+                "catalog_category": "languages",
+                "description_zh": "所查文献所属国家在相应统治时期使用的语言技能。",
+                "description_en": "The language skill matching the documents' country and historical reign."
+              }
+            }
+          ],
+          "validation_status": "awaiting_roll_system",
+          "unresolved_fields": [
+            "roll_system"
+          ],
+          "deferred_bindings": [
+            {
+              "field": "reading_language_skill",
+              "reason": "The creator labels a general language-dependent case; bind the specific catalog language skill when the country and document language are specified."
+            }
+          ],
+          "validation_note": {
+            "zh": "已保留普通历史与普通阅读两项。阅读按创作者括号中的说明对应文献语言技能，具体语种作为通用场景参数，尚未绑定具体技能名；当前记录不是可直接导出的固定技能训练行。两项检定的投掷制度尚未明确，不能仅凭加号判断。",
+            "en": "Both normal History and normal reading are preserved. Reading selects the document's language skill as specified by the creator; the language remains a general-scene parameter without a concrete catalog name. This is not yet an exportable fixed-skill row. The roll system for the two checks is unspecified and cannot be inferred from the plus sign alone."
+          }
+        }
+      ],
+      "check_mode_resolution": {
+        "repository": "iwa964/MeridiaGame",
+        "path": "Scripts/systems/dialogue/DialogueCheck.gd",
+        "blob_sha": "dfad88041c313968854896abe8094d6aef2b09b1",
+        "definition": "roll_pair",
+        "note": {
+          "zh": "创作者确认本条为双项检定，对应项目的 pair 形式；两项分别按各自普通难度进行单向阈值检定。",
+          "en": "The creator confirmed a two-entry check, matching the project's pair form; each entry uses its own normal unidirectional threshold check."
+        }
+      },
+      "label_status": "creator_labeled_parameterized",
+      "export_status": {
+        "fixed_row_ready": false,
+        "required_bindings": [
+          "reading_language_skill"
+        ],
+        "note": {
+          "zh": "标注已确认；阅读使用文献所属国家及统治时期的语言这一参数。实例化场景时绑定并验证具体语言技能后，才能导出固定技能行。",
+          "en": "The label is confirmed. Reading selects the language of the documents' country and reign. Bind and validate the concrete language skill when instantiating the scene before exporting a fixed-skill row."
+        }
+      }
+    }
+  ]
+}

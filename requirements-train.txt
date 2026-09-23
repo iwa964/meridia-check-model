@@ -1,0 +1,8 @@
+# Training, inference and evaluation. Lower bounds are the versions this was run with
+# (CPU); the code uses transformers v5 argument names (`dtype=`, a float `warmup_steps`).
+-r requirements.txt
+torch
+transformers>=5.17,<6
+peft>=0.21
+accelerate>=1.15
+tokenizers  # only for `smoke --tiny`, the offline random-weight model

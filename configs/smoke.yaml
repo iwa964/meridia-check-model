@@ -1,0 +1,35 @@
+# Pipeline check on a handful of creator-labelled rows: load -> convert -> a few training
+# steps -> save -> reload -> inference. It verifies the engineering, not the model: the
+# scores it prints are on the rows it just trained on.
+
+run_name: smoke
+seed: 42
+
+data:
+  sources:
+    - training_files/dice_rolling_train.json
+  prepared_dir: build/smoke-data
+
+model:
+  base_model: Qwen/Qwen2.5-0.5B-Instruct   # smallest model of the suggested family; `--tiny` needs none
+
+train:
+  learning_rate: 1.0e-4
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 1
+  warmup_ratio: 0.0
+
+smoke:
+  # Eight creator-labelled single checks: skills and an attribute (STR), all three
+  # difficulties, both input modes (declared action and observed event), and 000033,
+  # whose label is the creator's correction.
+  example_ids:
+    - dice_train_000001   # Climbing, extreme, declared action
+    - dice_train_000002   # Investigation, success
+    - dice_train_000003   # Hearing, success
+    - dice_train_000016   # Swimming, hard
+    - dice_train_000021   # STR attribute, success, observed event
+    - dice_train_000023   # Driving, hard, observed event
+    - dice_train_000027   # Shortbow, success
+    - dice_train_000033   # Cooking, success (corrected from hard)
+  max_steps: 10

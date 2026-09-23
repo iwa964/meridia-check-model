@@ -1,0 +1,104 @@
+"""Score predictions field by field, and save them for a person to read.
+
+Each field is scored only where it applies:
+
+* `format_valid` -- every row: the reply parsed as one decision with catalog labels.
+* `roll_required` -- every row (each has a creator decision).
+* `check` (skill or attribute) and `difficulty` -- only rows whose reference requires a
+  roll. A reference may accept several options (`alternative_examples`); a prediction is
+  right if it matches any accepted option. `difficulty` is scored against the option whose
+  kind and name the prediction chose, or against every accepted option's difficulty when
+  it chose none of them, so the two fields are measured separately.
+* `exact` -- the whole decision equals an accepted option.
+
+An unparseable reply counts as wrong on every field it applies to.
+
+Rows the run's manifest lists as training rows are excluded from the metrics of any split
+and counted, so re-preparing the data after training cannot leak them into validation.
+Scoring training rows on purpose (smoke mode, `--split train`) is labelled `held_out:
+false`. Only the `test` split -- Meridia-specific scenes -- is `independent_test`;
+validation is held out but drawn from the same general scenes as training.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+def _key(check: dict) -> tuple[str, str]:
+    return check["kind"], check["name"]
+
+
+def score(reference: dict, decision: dict | None) -> dict:
+    valid = decision is not None
+    out = {"format_valid": valid, "roll_required": valid and decision["roll_required"] == reference["roll_required"]}
+    if not reference["roll_required"]:
+        out.update(check=None, difficulty=None, exact=valid and not decision["roll_required"])
+        return out
+    options = [opt[0] for opt in reference["options"] if len(opt) == 1]
+    predicted = decision["checks"][0] if valid and decision["checks"] else None
+    if predicted is None:
+        out.update(check=False, difficulty=False, exact=False)
+        return out
+    matching = [o for o in options if _key(o) == _key(predicted)]
+    allowed = {o["difficulty"] for o in (matching or options)}
+    out.update(check=bool(matching), difficulty=predicted["difficulty"] in allowed,
+               exact=any(o == predicted for o in matching))
+    return out
+
+
+FIELDS = ("format_valid", "roll_required", "check", "difficulty", "exact")
+
+
+def summarize(scored: list[dict]) -> dict:
+    out = {}
+    for f in FIELDS:
+        applicable = [s[f] for s in scored if s[f] is not None]
+        correct = sum(1 for v in applicable if v)
+        out[f] = {"correct": correct, "total": len(applicable),
+                  "rate": round(correct / len(applicable), 4) if applicable else None}
+    return out
+
+
+def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], out_dir: str | Path,
+                  include_training_rows: bool = False, batch_size: int = 8) -> dict:
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    seen = [r for r in rows if r["id"] in train_ids]
+    scored_rows = rows if include_training_rows else [r for r in rows if r["id"] not in train_ids]
+    predictions = model.predict_many([r["input"] for r in scored_rows], batch_size=batch_size)
+    records, scores = [], []
+    for row, pred in zip(scored_rows, predictions):
+        s = score(row["reference"], pred["decision"])
+        scores.append(s)
+        records.append({
+            "id": row["id"], "source": row["source"], "split": row["split"], "input": row["input"],
+            "reference": row["reference"], "raw_output": pred["raw_output"], "decision": pred["decision"],
+            "format_errors": pred["errors"], "scores": s, "game_request": pred["game_request"],
+            "note": pred["note"], "trained_on": row["id"] in train_ids,
+        })
+    held_out = not any(r["trained_on"] for r in records) and split != "train"
+    if not held_out:
+        note = "NOT a held-out result: scored rows were used in training. This verifies the pipeline only."
+    elif split == "val":
+        note = ("held-out validation on general scenes, the same distribution as training; "
+                "not the independent Meridia-specific test")
+    else:
+        note = "independent test on Meridia-specific scenes"
+    metrics = {
+        "split": split,
+        "held_out": held_out,
+        "independent_test": held_out and split == "test",
+        "note": note,
+        "scored": len(records),
+        "excluded_trained_rows": [] if include_training_rows else sorted(r["id"] for r in seen),
+        "fields": summarize(scores),
+    }
+    if not rows:
+        metrics["note"] = f"the {split} split is empty; nothing was scored"
+    with (out_dir / "predictions.jsonl").open("w", encoding="utf-8") as f:
+        for rec in records:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    (out_dir / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return metrics

@@ -1,0 +1,75 @@
+"""Training-stack tests on the tiny random model: they need torch/transformers/peft
+(requirements-train.txt) and are skipped without them. They check the plumbing -- masking,
+length checks, save and reload -- never what the model answers."""
+
+import copy
+import json
+from pathlib import Path
+
+import pytest
+
+pytest.importorskip("torch")
+pytest.importorskip("peft")
+
+from check_model import prompt  # noqa: E402
+from check_model.adapter import load_rows  # noqa: E402
+from check_model.config import load_config  # noqa: E402
+from check_model.train import IGNORE_INDEX, encode  # noqa: E402
+
+SUBSET = Path(__file__).resolve().parent / "fixtures" / "dice_subset.json"
+
+
+@pytest.fixture(scope="module")
+def tiny(tmp_path_factory):
+    from check_model.catalog import load_catalog
+    from check_model.tiny import make_tiny_model
+
+    catalog = load_catalog(Path(__file__).resolve().parent.parent / "catalog" / "meridia_catalog.json")
+    rows, _ = load_rows([str(SUBSET)], catalog, "en")
+    rows = [r.to_json() for r in rows if r.target is not None]
+    system = prompt.system_prompt(catalog)
+    model_dir = make_tiny_model(tmp_path_factory.mktemp("tiny"), rows, system)
+    from transformers import AutoTokenizer
+
+    return {"dir": model_dir, "rows": rows, "system": system,
+            "tokenizer": AutoTokenizer.from_pretrained(model_dir)}
+
+
+def test_loss_is_on_the_answer_only(tiny):
+    row = tiny["rows"][0]
+    enc = encode(tiny["tokenizer"], tiny["system"], row, 4096)
+    first = next(i for i, label in enumerate(enc["labels"]) if label != IGNORE_INDEX)
+    assert all(label == IGNORE_INDEX for label in enc["labels"][:first])
+    answer = tiny["tokenizer"].decode(enc["labels"][first:])
+    assert answer.startswith(prompt.target_text(row["target"]))
+    assert "<|im_end|>" in answer  # the model is taught to stop
+
+
+def test_too_long_is_refused_not_truncated(tiny):
+    with pytest.raises(ValueError, match=tiny["rows"][0]["id"] + ".*exceeds max_seq_length"):
+        encode(tiny["tokenizer"], tiny["system"], tiny["rows"][0], 32)
+
+
+def test_train_save_reload_predict(tiny, tmp_path):
+    from check_model.infer import CheckModel
+    from check_model.train import train
+
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(tiny["dir"])
+    config["train"].update(per_device_train_batch_size=2, gradient_accumulation_steps=1)
+    run = tmp_path / "run"
+    manifest = train(config, tiny["rows"][:3], tiny["rows"][3:], run_dir=run, source_files=[], max_steps=2)
+    for name in ("model/adapter_config.json", "model/tokenizer_config.json", "catalog.json",
+                 "train_log.jsonl", "run_manifest.json"):
+        assert (run / name).exists(), name
+    saved = json.loads((run / "run_manifest.json").read_text())
+    assert saved["examples"]["train_ids"] == [r["id"] for r in tiny["rows"][:3]]
+    assert saved["global_steps"] == 2 == manifest["global_steps"]
+    assert saved["prompt"]["system_prompt"] == tiny["system"]
+
+    model = CheckModel(run, max_new_tokens=8)
+    result = model.predict(tiny["rows"][0]["input"])
+    # Random weights: the reply is whatever it is; what matters is that it came back scored.
+    assert set(result) == {"valid", "decision", "game_request", "note", "errors", "raw_output"}
+    assert isinstance(result["raw_output"], str)
+    assert result["valid"] == (result["decision"] is not None)

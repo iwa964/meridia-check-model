@@ -1,0 +1,47 @@
+# Starting configuration for a first real training run. Edit freely; unknown keys are errors.
+# Paths are relative to the repository root. Why each value was chosen: TRAINING.md.
+
+run_name: check-sft
+seed: 42
+
+data:
+  sources:
+    - training_files/dice_rolling_train.json
+  catalog: catalog/meridia_catalog.json
+  language: en              # en | zh -- which text of the bilingual records the prompt shows
+  prepared_dir: build/data
+  val_fraction: 0.2         # of general-scope scenario groups
+  split_seed: 0             # changes the split; independent of `seed`
+  near_duplicate_threshold: 0.2   # TF-IDF cosine; null disables similarity grouping
+  extra_groups: []          # e.g. [[dice_train_000010, dice_train_000043]] to force one group
+
+model:
+  base_model: Qwen/Qwen2.5-1.5B-Instruct   # any chat model with a chat template, or a local path
+  revision: null            # pin a hub commit hash for a reproducible run
+  trust_remote_code: false
+
+lora:
+  enabled: true             # false = full fine-tune (needs far more memory)
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: all-linear
+
+train:
+  output_dir: runs
+  learning_rate: 2.0e-4
+  num_train_epochs: 5
+  max_steps: -1             # > 0 overrides num_train_epochs
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 2
+  max_seq_length: 1024      # a longer row stops the run; it is never truncated
+  warmup_ratio: 0.1
+  weight_decay: 0.0
+  lr_scheduler_type: cosine
+  logging_steps: 1
+  precision: auto           # auto: bf16 on a GPU that supports it, fp16 on other GPUs, fp32 on CPU
+  gradient_checkpointing: false
+
+inference:
+  max_new_tokens: 64        # a single-check answer is ~30 tokens
+  batch_size: 8
