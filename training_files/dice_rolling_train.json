@@ -1268,9 +1268,7 @@
           }
         }
       ]
-    }
-  ],
-  "pending_examples": [
+    },
     {
       "id": "dice_train_000048",
       "input_mode": "observed_event",
@@ -1284,6 +1282,55 @@
       "observed_event": {
         "zh": "指挥员已经开始做手势，角色正在透过搬运工之间的空隙观察其双臂的位置；能否及时准确辨认并转告信号尚未结算。",
         "en": "The signaler has begun gesturing, and the character is watching the position of their arms through gaps between the workers. Whether the character can identify and relay the signal accurately in time remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "困难侦查；还是有点远的",
+        "roll_required": true,
+        "check_mode": "single",
+        "checks": [
+          {
+            "kind": "skill",
+            "name": "Investigation",
+            "difficulty": "hard",
+            "roll_system": "unidirectional",
+            "roll_system_source": "creator_default"
+          }
+        ],
+        "rationale": "还是有点远的"
+      },
+      "skill_resolution": {
+        "creator_wording": "侦查",
+        "canonical_name": "Investigation",
+        "basis": {
+          "zh": "沿用 dice_train_000018 中将创作者的“侦查”表述记录为 Investigation 的既有对应；此处保留该中文表述，不将助手先前建议的 Perception 当作创作者标签。",
+          "en": "Uses the existing mapping of the creator's wording 侦查 to Investigation in dice_train_000018. The creator's wording is preserved; the assistant's prior Perception recommendation is not treated as the creator's label."
+        }
+      },
+      "clarifications": [
+        {
+          "question_raw": "给我推荐技能",
+          "answer": {
+            "zh": "助手建议普通 Perception（感知／观察），单项、单向：手势含义已约定，重点是辨认双臂位置；虽然有暮色、小雨与遮挡，但两种手势差异及衣服与背景反差明显。此为助手建议，最终采用创作者后续给出的标签。",
+            "en": "The assistant recommended a normal, single-entry, unidirectional Perception check: the gestures' meanings were already agreed, so the task was to see the arm positions; the gestures and the coat/background contrast were distinct despite dusk, rain, and obstruction. This was an assistant recommendation; the creator's subsequent response supplies the final label."
+          }
+        }
+      ]
+    }
+  ],
+  "pending_examples": [
+    {
+      "id": "dice_train_000049",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。角色担任一艘小型货船的领航员。船刚在大雾中偏离原定航线，目前已在安全水域停泊；雾散后，可以清楚辨认岸上的白色灯塔和一座独立岩峰。船上有完好的罗盘、标明这两个地标及周围浅滩的海图、直尺和铅笔，但没有船只当前的位置记录。角色测得灯塔在方位角310度，岩峰在45度，需要在十五分钟内确定船位，并画出通往海图上所标港口、避开浅滩的航线。另一名船员负责操船，当前尚未起航。",
+        "en": "Outside combat, the character is navigating a small cargo vessel that strayed from its planned course in dense fog. The vessel is now anchored in safe water. With the fog clearing, a white coastal lighthouse and an isolated rocky peak are clearly identifiable. A working compass, a nautical chart showing both landmarks and the surrounding shoals, a ruler, and a pencil are available, but there is no record of the vessel's current position. The measured bearings are 310 degrees to the lighthouse and 45 degrees to the peak. Within fifteen minutes, the character must establish the vessel's position and plot a route to the harbor marked on the chart that avoids the shoals. Another crew member handles the vessel, which has not yet departed."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色已经核对地标，正在将测得的方位标上海图，推定船位并规划绕开浅滩的航线；定位与航线是否正确尚未确定。",
+        "en": "The character has confirmed the landmarks and is plotting the measured bearings on the chart to establish the vessel's position and plan a route around the shoals. Whether the position and route are correct remains unresolved."
       },
       "annotation": null
     }
