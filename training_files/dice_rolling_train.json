@@ -1345,9 +1345,7 @@
         ],
         "rationale": null
       }
-    }
-  ],
-  "pending_examples": [
+    },
     {
       "id": "dice_train_000050",
       "input_mode": "observed_event",
@@ -1361,6 +1359,38 @@
       "observed_event": {
         "zh": "角色已经开始正式演唱，正在按记忆中的旋律控制音高、节奏和呼吸；能否稳定完成整首歌曲尚未确定。",
         "en": "The character has begun the official performance and is controlling pitch, rhythm, and breathing while singing the memorized melody. Whether they can perform the entire song steadily remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "普通singing",
+        "roll_required": true,
+        "check_mode": "single",
+        "checks": [
+          {
+            "kind": "skill",
+            "name": "Singing",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "creator_default"
+          }
+        ],
+        "rationale": null
+      }
+    }
+  ],
+  "pending_examples": [
+    {
+      "id": "dice_train_000051",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。角色是送货马车的车夫，需要在五分钟内将车尾倒进作坊院门，停到门内的卸货位置。马车连同车轮的最宽处为1.8米，车厢长3米；院门净宽2.3米，两侧是坚硬的石门柱。门外街道宽8米，院内卸货区域宽4米、深7米，地面平整、干燥且没有坡度。车上装有约300公斤已绑牢的木箱，箱子堆得较低，车夫回头能看到车尾两角。拉车的马平静，受过倒退训练；车辆完好，没有行人或其他车辆经过，也没有人站在车后指挥。",
+        "en": "Outside combat, the character is driving a delivery wagon and must reverse its rear through a workshop's courtyard gate to the unloading position inside within five minutes. The wagon's maximum width, including its wheels, is 1.8 metres, and its cargo body is 3 metres long. The gate has 2.3 metres of clear width between solid stone posts. The street outside is 8 metres wide, and the unloading area inside is 4 metres wide and 7 metres deep. The ground is level, dry, and free of slopes. The wagon carries about 300 kilograms of securely tied wooden crates, stacked low enough for the driver to see both rear corners by looking back. The horse is calm and trained to step backwards, and the wagon is in good condition. No pedestrians or other vehicles are passing, and nobody is available behind the wagon to guide the driver."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "角色已经将马车调到院门前，正在通过缰绳和口令让马小步倒退，并不断回头校正车尾位置；能否在规定时间内倒入卸货位置、避免车身碰到门柱，尚未确定。",
+        "en": "The character has positioned the wagon in front of the gate and is using reins and verbal commands to make the horse take short backward steps, repeatedly looking back to adjust the wagon's alignment. Whether the wagon reaches the unloading position within the allotted time without striking either gatepost remains unresolved."
       },
       "annotation": null
     }
