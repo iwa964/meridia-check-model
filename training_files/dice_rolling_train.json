@@ -1229,9 +1229,7 @@
         ],
         "rationale": null
       }
-    }
-  ],
-  "pending_examples": [
+    },
     {
       "id": "dice_train_000047",
       "input_mode": "observed_event",
@@ -1245,6 +1243,47 @@
       "observed_event": {
         "zh": "角色已经测量原钥匙、在钥匙坯上标出齿口位置，并开始夹住钥匙坯逐处锉削；能否在时限内做出可靠开锁的备用钥匙尚未确定。",
         "en": "The character has measured the original key, marked the cut positions on the blank, and begun filing the cuts with the blank secured in the vise. Whether they can produce a spare that reliably opens the lock within the time limit remains unresolved."
+      },
+      "annotation": {
+        "raw_response": "那就用普通smithing吧",
+        "roll_required": true,
+        "check_mode": "single",
+        "checks": [
+          {
+            "kind": "skill",
+            "name": "Smithing",
+            "difficulty": "success",
+            "roll_system": "unidirectional",
+            "roll_system_source": "creator_default"
+          }
+        ],
+        "rationale": null
+      },
+      "clarifications": [
+        {
+          "question_raw": "你给我推荐技能吧。我们不是只有lockpicking吗",
+          "answer": {
+            "zh": "当前技能表没有单独的配钥匙技能，但包含 Smithing（锻造）和 Lockpicking（开锁）。助手根据测量并加工黄铜钥匙坯的动作，建议普通 Smithing，单项、单向；这是场景适用范围建议，不是已验证的上游配钥匙规则，最终标注由创作者确认。",
+            "en": "The current catalog has no standalone key-copying skill, but includes Smithing and Lockpicking. Based on measuring and shaping the brass key blank, the assistant recommended a normal, single-entry, unidirectional Smithing check. This was a scene-specific recommendation, not a verified upstream rule assigning key copying to Smithing; the creator supplied the final label."
+          }
+        }
+      ]
+    }
+  ],
+  "pending_examples": [
+    {
+      "id": "dice_train_000048",
+      "input_mode": "observed_event",
+      "scene": {
+        "zh": "当前不在战斗中。角色在码头负责观察六十米外、对岸指挥员的手势，再转告身旁的绞盘操作员。双方事先约定：双臂在头顶交叉表示停止，右臂向侧面平伸表示继续。现在临近黄昏，下着小雨；指挥员穿着浅色外套，身后是深色仓库墙。搬运工和货物偶尔遮挡视线，雨声与机械声使跨岸喊话无法听清。指挥员这次手势会维持约五秒，角色没有望远镜，需要在绞盘继续牵引货物前给出准确信息。",
+        "en": "Outside combat, the character is watching a signaler sixty metres away across a dock and relaying the gestures to a winch operator standing beside them. They agreed beforehand that both arms crossed overhead mean stop, while the right arm extended sideways means continue. It is dusk with light rain. The signaler wears a light coat against a dark warehouse wall. Workers and cargo occasionally obstruct the view, and rain and machinery make shouted instructions from across the dock unintelligible. The current gesture will last about five seconds. The character has no binoculars and must relay the correct instruction before the winch resumes pulling the cargo."
+      },
+      "runtime_state": {
+        "in_combat": false
+      },
+      "observed_event": {
+        "zh": "指挥员已经开始做手势，角色正在透过搬运工之间的空隙观察其双臂的位置；能否及时准确辨认并转告信号尚未结算。",
+        "en": "The signaler has begun gesturing, and the character is watching the position of their arms through gaps between the workers. Whether the character can identify and relay the signal accurately in time remains unresolved."
       },
       "annotation": null
     }
