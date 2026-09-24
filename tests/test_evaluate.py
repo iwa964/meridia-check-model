@@ -170,8 +170,10 @@ def test_a_scenario_member_reached_only_through_a_removed_chain_stays_related():
     # since been removed and 000029 is still in no split file.
     candidate = dict(_row("dice_train_000047", "dice_train_000029", "A later-annotated variation."),
                      links=["dice_train_000029"])
+    # The training row recorded no link of its own (only 000029 pointed back at it), so only the
+    # recorded scenario membership still connects the candidate.
     known = dict(train_ids={"dice_train_000028"}, train_fingerprints=frozenset(), train_texts=[],
-                 threshold=None, train_links={"dice_train_000028": ["dice_train_000029"]})
+                 threshold=None, train_links={"dice_train_000028": []})
     assert training_relatives([candidate], **known) == set()  # no direct link, no shared current group
     scenario = {"dice_train_000028", "dice_train_000029", "dice_train_000047"}
     assert training_relatives([candidate], **known, train_scenario_ids=scenario) == {"dice_train_000047"}
@@ -196,3 +198,13 @@ def test_a_row_grouped_with_a_newly_related_row_is_related_too():
                                  train_fingerprints=frozenset(), train_texts=[], threshold=None,
                                  train_links={"removed": []})
     assert related == {"bridge", "candidate"}
+
+
+def test_a_link_to_a_removed_member_of_a_trained_scenario_relates():
+    from check_model.evaluate import training_relatives
+
+    # Trained scenario {T, U} is gone from the data; C is new and links to U.
+    new = dict(_row("C", "C", "A new scene."), links=["U"])
+    related = training_relatives([new], train_ids={"T"}, train_fingerprints=frozenset(), train_texts=[],
+                                 threshold=None, train_links={"T": []}, train_scenario_ids={"T", "U"})
+    assert related == {"C"}

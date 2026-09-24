@@ -75,8 +75,9 @@ run trained on.
    snapshot and commit it:
    `python -m check_model sync-catalog --meridia ../MeridiaGame`
    It refuses a checkout with uncommitted changes to the two catalog sources (the snapshot
-   records `HEAD` as its commit), and a difficulty label the prompt has no rule text for
-   (`prompt.DIFFICULTY_RULES`, from the game's `Check.threshold`).
+   records `HEAD` as its commit), a difficulty label the prompt has no rule text for
+   (`prompt.DIFFICULTY_RULES`, from the game's `Check.threshold`), and a `KINDS` set other than
+   the `skill` and `attribute` this code implements.
 4. Train a new run. Runs already trained keep the prompt and catalog they were trained with;
    evaluating one of them on the changed data needs `--allow-data-change` (see *Evaluate*).
 

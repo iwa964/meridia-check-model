@@ -141,9 +141,11 @@ def cmd_predict(args) -> None:
 
     config = _run_config(args)
     text = Path(args.input).read_text(encoding="utf-8") if args.input != "-" else sys.stdin.read()
+    from . import strictjson
+
     try:
-        queries = json.loads(text)
-    except json.JSONDecodeError as e:
+        queries = strictjson.loads(text)  # a repeated scene or action is ambiguous, not "last wins"
+    except ValueError as e:
         sys.exit(f"--input {args.input}: not valid JSON ({e})")
     if not isinstance(queries, (dict, list)):
         # A string would otherwise be iterated as one query per character, and null or a number crash.

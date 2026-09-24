@@ -51,10 +51,13 @@ def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_finge
                if r["id"] in train_ids or input_fingerprint(r["input"]) in train_fingerprints}
     groups = {r["group"] for r in all_rows if r["id"] in trained}
     related = {r["id"] for r in all_rows if r["group"] in groups and r["id"] not in trained}
-    linked_from_training = {i for links in (train_links or {}).values() for i in links}
+    # Every id that belonged to a trained scenario when it was trained: the training rows, the
+    # ids grouped with them then, and the ids they linked to. A row now that is one of them, or
+    # links to one, is in that scenario -- even when the id it names has since been removed.
+    historical = (set(train_ids) | set(train_scenario_ids or ())
+                  | {i for links in (train_links or {}).values() for i in links})
     related |= {r["id"] for r in all_rows if r["id"] not in trained
-                and (r["id"] in linked_from_training or set(r.get("links") or []) & set(train_ids))}
-    related |= {r["id"] for r in all_rows if r["id"] not in trained and r["id"] in (train_scenario_ids or ())}
+                and (r["id"] in historical or set(r.get("links") or []) & historical)}
     if threshold is not None and train_texts:
         texts = {r["id"]: r.get("similarity_text") or "" for r in all_rows if r["id"] not in trained}
         texts.update({f"\0train{i}": t for i, t in enumerate(train_texts)})

@@ -94,3 +94,14 @@ def test_sync_refuses_a_difficulty_the_prompt_cannot_describe(tmp_path):
     with pytest.raises(SystemExit, match=r"no rule text for \['critical'\]"):
         main(["sync-catalog", "--meridia", str(root), "--out", str(out)])
     assert not out.exists()
+
+
+def test_sync_refuses_a_kind_this_code_does_not_implement(tmp_path):
+    from check_model.__main__ import main
+
+    root = fake_meridia(tmp_path / "MeridiaGame",
+                        CONSTANTS.replace('KINDS = ("skill", "attribute")', 'KINDS = ("skill", "attribute", "save")'))
+    out = tmp_path / "catalog.json"
+    with pytest.raises(SystemExit, match=r"catalog kinds \['skill', 'attribute', 'save'\]"):
+        main(["sync-catalog", "--meridia", str(root), "--out", str(out)])
+    assert not out.exists()

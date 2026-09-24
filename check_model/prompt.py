@@ -52,6 +52,11 @@ DIFFICULTY_RULES = {
 }
 
 
+#: The check kinds this code implements end to end: the prompt describes these two, the catalog
+#: treats every non-attribute kind as a skill, and to_game_request maps exactly these.
+SUPPORTED_KINDS = ("skill", "attribute")
+
+
 def _difficulty_sentence(difficulties: tuple[str, ...]) -> str:
     unknown = [d for d in difficulties if d not in DIFFICULTY_RULES]
     if unknown or not difficulties:
@@ -62,6 +67,9 @@ def _difficulty_sentence(difficulties: tuple[str, ...]) -> str:
 
 
 def system_prompt(catalog: Catalog) -> str:
+    if set(catalog.kinds) != set(SUPPORTED_KINDS):
+        raise ValueError(f"catalog kinds {list(catalog.kinds)}: this code implements exactly "
+                         f"{list(SUPPORTED_KINDS)} (prompt, label validation and game request)")
     return (
         "You choose the dice check for one moment in the game Meridia. The game rolls the dice "
         "and resolves the result; you only decide the check.\n\n"

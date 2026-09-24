@@ -1,6 +1,7 @@
 # Starting configuration for a first real training run. Edit freely; unknown keys, values of the
 # wrong type (a quoted "false", 2e-4 without a dot, which YAML reads as a string) and values out of
-# range (a zero learning rate, epoch count or LoRA rank; a fraction outside [0, 1]) are errors.
+# range (a zero learning rate, epoch count or LoRA rank; a fraction outside [0, 1]) and a key
+# repeated within one section are errors.
 # Paths are relative to the repository root. Why each value was chosen: TRAINING.md.
 
 run_name: check-sft

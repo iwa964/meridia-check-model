@@ -69,6 +69,9 @@ STR_OR_LIST = {"lora.target_modules"}
 #: config (Path(None), iterating None). "ids" is a list of non-empty strings.
 LIST_ITEMS = {"data.sources": "str", "smoke.example_ids": "str", "lora.target_modules": "str",
               "data.extra_groups": "ids"}
+#: Lists that must name something. No sources would make a clean prepare replace the last good
+#: split files with empty ones; no target modules gives LoRA nothing to adapt.
+NON_EMPTY = {"data.sources", "lora.target_modules"}
 
 
 def _is_id(value) -> bool:
@@ -102,6 +105,8 @@ def _check_type(path: str, default, value) -> None:
         expected = "string" if default is None else type(default).__name__
         raise ValueError(f"config key {path!r} must be a {expected}, got {value!r}")
     if isinstance(value, list):
+        if path in NON_EMPTY and not value:
+            raise ValueError(f"config key {path!r} must list at least one entry")
         bad = _bad_items(path, value)
         if bad:
             holds = "non-empty strings" if LIST_ITEMS[path] == "str" else "lists of non-empty id strings"
@@ -160,10 +165,28 @@ def _check_ranges(config: dict) -> None:
             raise ValueError(f"config key {key!r} must be in [{low}, {high}{bound}, got {value!r}")
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader that refuses a key repeated within one mapping. PyYAML keeps the last one, so a
+    `train:` section repeated by a merge would silently replace the first one's settings."""
+
+
+def _unique_mapping(loader: yaml.SafeLoader, node: yaml.MappingNode, deep: bool = False) -> dict:
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise ValueError(f"duplicate config key {key!r} at line {key_node.start_mark.line + 1}")
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _unique_mapping)
+
+
 def load_config(path: str | Path | None) -> dict:
     if path is None:
         return copy.deepcopy(DEFAULTS)
-    document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    document = yaml.load(Path(path).read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)
     if document is None:  # an empty file: every default
         document = {}
     if not isinstance(document, dict):

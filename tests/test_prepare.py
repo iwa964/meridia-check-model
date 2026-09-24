@@ -218,3 +218,27 @@ def test_list_settings_with_malformed_elements_are_refused(tmp_path, section, ke
     path.write_text(yaml.safe_dump({section: {key: value}}), encoding="utf-8")
     with pytest.raises(ValueError, match=f"'{section}.{key}' must be a list of"):
         load_config(path)
+
+
+def test_a_config_key_repeated_in_one_mapping_is_refused(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text("train:\n  learning_rate: 1.0e-4\ntrain:\n  precision: fp32\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate config key 'train' at line 3"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("section, key", [("data", "sources"), ("lora", "target_modules")])
+def test_a_list_that_must_name_something_cannot_be_empty(tmp_path, section, key):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({section: {key: []}}), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"'{section}.{key}' must list at least one entry"):
+        load_config(path)
+
+
+def test_predict_refuses_a_query_with_a_repeated_key(tmp_path):
+    source = tmp_path / "queries.json"
+    source.write_text('{"scene": "A cliff.", "scene": "A river.", "player_action": "I climb."}', encoding="utf-8")
+    config = tmp_path / "empty.yaml"
+    config.write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"duplicate key\(s\) \['scene'\]"):
+        main(["predict", "--run", str(tmp_path / "no-run"), "--config", str(config), "--input", str(source)])
