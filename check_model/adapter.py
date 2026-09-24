@@ -287,10 +287,6 @@ def _meta(data: dict, key: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row], Report]:
     report = Report()
     rows: list[Row] = []
@@ -304,8 +300,11 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
                                   "source file not found; check data.sources (the dice dataset is added "
                                   "to main by its own PR, iwa964/meridia-check-model#1)"})
             continue
+        # One read: the recorded hash is of exactly the bytes parsed, even if the file is saved
+        # again in between. (UnicodeDecodeError is a ValueError.)
+        raw = path.read_bytes()
         try:
-            data = strictjson.loads(path.read_text(encoding="utf-8"))
+            data = strictjson.loads(raw.decode("utf-8"))
         except ValueError as exc:
             report.errors.append({"source": source, "id": None, "message": f"not valid JSON: {exc}"})
             continue
@@ -314,7 +313,7 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
             continue
         version = data.get("schema_version")
         info = {
-            "path": source, "sha256": _sha256(path), "schema_version": version,
+            "path": source, "sha256": hashlib.sha256(raw).hexdigest(), "schema_version": version,
             "scenario_scope": data.get("scenario_scope"), "split": data.get("split"),
             "skill_catalog_blob_sha": _meta(data, "skill_catalog").get("blob_sha"),
             "attribute_catalog_blob_sha": _meta(data, "attribute_catalog").get("blob_sha"),

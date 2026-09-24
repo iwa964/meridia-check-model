@@ -84,3 +84,11 @@ def test_non_standard_json_constants_are_refused(catalog, constant):
         strictjson.loads('{"scene": "s", "runtime_state": {"hp": %s}}' % constant)
     decision, errors = prompt.parse_decision('{"roll_required": %s, "checks": []}' % constant, catalog)
     assert decision is None and "not valid JSON" in errors[0]
+
+
+def test_a_number_too_large_for_a_float_is_refused(catalog):
+    from check_model import strictjson
+
+    with pytest.raises(ValueError, match="1e999 is out of range"):
+        strictjson.loads('{"scene": "s", "runtime_state": {"x": 1e999}}')
+    assert strictjson.loads('{"x": 1.5e300, "n": 123456789012345678901234567890}')["x"] == 1.5e300

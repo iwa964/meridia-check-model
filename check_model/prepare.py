@@ -95,6 +95,20 @@ def split_hashes(prepared_dir: str | Path) -> dict[str, str | None]:
     return out
 
 
+#: The fields evaluation reads from a prepared row, and their types.
+ROW_FIELDS = {"id": str, "source": str, "split": str, "group": str, "input": dict, "reference": dict}
+
+
+def _row_problem(row: dict) -> str | None:
+    missing = [k for k in ROW_FIELDS if k not in row]
+    if missing:
+        return f"missing {missing}"
+    wrong = [k for k, kind in ROW_FIELDS.items() if not isinstance(row[k], kind)]
+    if wrong:
+        return f"wrong type for {wrong}"
+    return None
+
+
 def read_split(prepared_dir: str | Path, split: str) -> list[dict]:
     path = Path(prepared_dir) / f"{split}.jsonl"
     if not path.exists():
@@ -109,6 +123,9 @@ def read_split(prepared_dir: str | Path, split: str) -> list[dict]:
             if not isinstance(row, dict):
                 raise ValueError(f"{path}:{number}: not a prepared row (a JSON object is required, got "
                                  f"{type(row).__name__}); re-run prepare")
+            problem = _row_problem(row)
+            if problem:
+                raise ValueError(f"{path}:{number}: not a prepared row ({problem}); re-run prepare")
             rows.append(row)
     return rows
 

@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -252,10 +253,28 @@ def test_a_blank_string_setting_is_refused(tmp_path, section, key):
         load_config(path)
 
 
+#: A prepared row with every field evaluation reads (the shape Row.to_json writes).
+VALID_ROW = {"id": "r1", "source": "s.json", "split": "val", "group": "r1",
+             "input": {"scene": "s", "player_action": "a"},
+             "reference": {"roll_required": False, "options": []}}
+
+
 @pytest.mark.parametrize("line", ["null", '"a string"', "[1, 2]"])
 def test_a_prepared_line_that_is_not_an_object_is_named(tmp_path, line):
     from check_model.prepare import read_split
 
-    (tmp_path / "val.jsonl").write_text(json.dumps({"id": "r1"}) + "\n" + line + "\n", encoding="utf-8")
+    (tmp_path / "val.jsonl").write_text(json.dumps(VALID_ROW) + "\n" + line + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match=r"val\.jsonl:2: not a prepared row \(a JSON object is required"):
+        read_split(tmp_path, "val")
+
+
+@pytest.mark.parametrize("row, problem", [
+    ({}, "missing ['id', 'source', 'split', 'group', 'input', 'reference']"),
+    ({**VALID_ROW, "input": "a scene"}, "wrong type for ['input']"),
+    ({k: v for k, v in VALID_ROW.items() if k != "group"}, "missing ['group']")])
+def test_a_prepared_row_missing_what_evaluation_reads_is_named(tmp_path, row, problem):
+    from check_model.prepare import read_split
+
+    (tmp_path / "val.jsonl").write_text(json.dumps(VALID_ROW) + "\n" + json.dumps(row) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"val\.jsonl:2: not a prepared row \(" + re.escape(problem)):
         read_split(tmp_path, "val")

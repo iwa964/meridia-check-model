@@ -253,3 +253,27 @@ def test_a_no_roll_label_with_a_check_mode_is_an_error(catalog, subset, write_so
     no_roll["annotation"]["check_mode"] = mode
     rows, report = load(catalog, write_source(subset))
     assert ("dice_train_000940", message) in messages(report)
+
+
+def test_the_recorded_hash_is_of_the_bytes_that_were_parsed(catalog, subset, write_source, monkeypatch):
+    import json as json_module
+
+    source = Path(write_source(subset))
+    parsed = source.read_bytes()
+    edited = json_module.dumps({**subset, "dataset_name": "saved again meanwhile"}).encode("utf-8")
+    swapped = []
+    real_bytes, real_text = Path.read_bytes, Path.read_text
+
+    def then_save_again(read):
+        def wrapper(self, *args, **kwargs):
+            out = read(self, *args, **kwargs)
+            if self == source and not swapped:  # the file is saved again right after the first read
+                swapped.append(True)
+                source.write_bytes(edited)
+            return out
+        return wrapper
+
+    monkeypatch.setattr(Path, "read_bytes", then_save_again(real_bytes))
+    monkeypatch.setattr(Path, "read_text", then_save_again(real_text))
+    _, report = load(catalog, source)
+    assert report.sources[0]["sha256"] == hashlib.sha256(parsed).hexdigest()

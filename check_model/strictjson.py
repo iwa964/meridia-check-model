@@ -8,6 +8,7 @@ reads as whichever came last -- where another parser may read the first.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 
@@ -25,6 +26,16 @@ def _no_constant(name: str) -> Any:
     raise ValueError(f"{name} is not valid JSON")
 
 
+def _finite_float(token: str) -> float:
+    # 1e999 is a valid JSON number that Python reads as inf, which json.dumps writes as Infinity.
+    value = float(token)
+    if not math.isfinite(value):
+        raise ValueError(f"{token} is out of range for a float")
+    return value
+
+
 def loads(text: str) -> Any:
-    """json.loads, raising ValueError on a repeated key or a NaN / Infinity constant."""
-    return json.loads(text, object_pairs_hook=_unique, parse_constant=_no_constant)
+    """json.loads, raising ValueError on a repeated key, a NaN / Infinity constant, or a number
+    too large for a finite float."""
+    return json.loads(text, object_pairs_hook=_unique, parse_constant=_no_constant,
+                      parse_float=_finite_float)
