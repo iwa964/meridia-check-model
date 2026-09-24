@@ -695,3 +695,22 @@ def test_prepare_never_writes_over_a_source_or_the_catalog(tmp_path, subset, nam
     catalog.write_bytes((ROOT / "catalog" / "meridia_catalog.json").read_bytes())
     with pytest.raises(SystemExit, match="would overwrite"):
         main(["prepare", "--config", config_file(tmp_path, SUBSET, catalog=str(catalog))])
+
+
+@pytest.mark.parametrize("groups", [[[]], [["dice_train_000001"]]])
+def test_an_extra_group_that_cannot_join_two_records_is_refused(tmp_path, groups):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({"data": {"extra_groups": groups}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="'data.extra_groups' must be a list of lists of two or more id strings"):
+        load_config(path)
+
+
+def test_a_hub_base_is_not_served_from_a_local_path_of_the_same_name(tmp_path, monkeypatch):
+    from check_model.infer import check_local_base
+
+    base = {"name_or_path": "org/model", "local_sha256": None}
+    monkeypatch.chdir(tmp_path)
+    check_local_base(base, "org/model")  # nothing of that name here: the hub is used
+    (tmp_path / "org" / "model").mkdir(parents=True)
+    with pytest.raises(ValueError, match="was trained from the hub, but a local path"):
+        check_local_base(base, "org/model")

@@ -81,7 +81,8 @@ def _is_id(value) -> bool:
 def _bad_items(path: str, value: list) -> list:
     if LIST_ITEMS[path] == "str":
         return [v for v in value if not _is_id(v)]
-    return [v for v in value if not (isinstance(v, list) and all(_is_id(i) for i in v))]
+    # A group of fewer than two ids joins nothing: a mistyped one would silently group nothing.
+    return [v for v in value if not (isinstance(v, list) and len(v) >= 2 and all(_is_id(i) for i in v))]
 
 
 def _check_type(path: str, default, value) -> None:
@@ -118,7 +119,7 @@ def _check_type(path: str, default, value) -> None:
             raise ValueError(f"config key {path!r} must list at least one entry")
         bad = _bad_items(path, value)
         if bad:
-            holds = "non-empty strings" if LIST_ITEMS[path] == "str" else "lists of non-empty id strings"
+            holds = "non-empty strings" if LIST_ITEMS[path] == "str" else "lists of two or more id strings"
             raise ValueError(f"config key {path!r} must be a list of {holds}, got {bad!r} in it")
     if isinstance(value, float) and not math.isfinite(value):
         # YAML reads .inf and .nan as floats; no setting here means anything with one.

@@ -36,6 +36,11 @@ def _same_file(a: Path, b: Path) -> bool:
         return False
 
 
+def overwritten(outputs: list[Path], inputs: list[Path]) -> list[str]:
+    """The inputs that one of `outputs` is (the same file, however spelled)."""
+    return sorted({str(i) for i in inputs for o in outputs if _same_file(i, o)})
+
+
 def check_outputs(config: dict) -> None:
     """ValueError when a file prepare writes is one it reads. A source or the catalog under
     data.prepared_dir with an output's name would be overwritten -- report.json even by a
@@ -43,7 +48,7 @@ def check_outputs(config: dict) -> None:
     data = config["data"]
     out = Path(data["prepared_dir"])
     inputs = [Path(s) for s in data["sources"]] + [Path(data["catalog"])]
-    clashes = sorted({str(i) for i in inputs for name in OUTPUT_FILES if _same_file(i, out / name)})
+    clashes = overwritten([out / name for name in OUTPUT_FILES], inputs)
     if clashes:
         raise ValueError(f"data.prepared_dir {out} is where prepare writes {list(OUTPUT_FILES)}, which would "
                          f"overwrite the input(s) {clashes}; choose another prepared_dir")

@@ -241,8 +241,21 @@ def _pinned_inside(out: Path, run: Path, manifest: dict) -> Path | None:
     return next((p for p in pinned if resolved.is_relative_to(p.resolve())), None)
 
 
+def _eval_overwrites(out: Path, run: Path, config: dict) -> list[str]:
+    """Inputs an evaluation writing into `out` would overwrite: the sources, the catalog, the
+    prepared files, and the run's own files."""
+    from .evaluate import EVAL_OUTPUT_FILES
+    from .prepare import OUTPUT_FILES, overwritten
+
+    data = config["data"]
+    inputs = ([Path(s) for s in data["sources"]] + [Path(data["catalog"])]
+              + [Path(data["prepared_dir"]) / name for name in OUTPUT_FILES]
+              + [run / "run_manifest.json", run / "catalog.json", run / "train_log.jsonl"])
+    return overwritten([out / name for name in EVAL_OUTPUT_FILES], inputs)
+
+
 def cmd_evaluate(args) -> None:
-    from .evaluate import evaluate_rows, training_relatives
+    from .evaluate import EVAL_OUTPUT_FILES, evaluate_rows, training_relatives
     from .infer import check_format, load_run_catalog
     from .prepare import duplicate_ids, duplicate_inputs, read_split
 
@@ -252,11 +265,15 @@ def cmd_evaluate(args) -> None:
     # manifest is read once: the config, the exclusions and the model all come from that read.
     manifest = _manifest(args.run)
     config = _run_config(args, manifest)
-    pinned = _pinned_inside(Path(args.out) if args.out else Path(args.run) / "eval" / args.split,
-                            Path(args.run), manifest)
+    out = Path(args.out) if args.out else Path(args.run) / "eval" / args.split
+    pinned = _pinned_inside(out, Path(args.run), manifest)
     if pinned:
         sys.exit(f"refusing to evaluate: --out {args.out} is inside {pinned}, whose files the run is "
                  "checked against at every load; writing there would make the run refuse to load")
+    clashes = _eval_overwrites(out, Path(args.run), config)
+    if clashes:
+        sys.exit(f"refusing to evaluate: writing {list(EVAL_OUTPUT_FILES)} into {out} would overwrite "
+                 f"{clashes}; choose another --out")
     mismatch = _data_mismatch(config, manifest)
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
@@ -302,7 +319,6 @@ def cmd_evaluate(args) -> None:
                                  train_links=manifest["examples"].get("train_links", {}),
                                  train_scenario_ids=set(manifest["examples"].get("train_scenario_ids", [])),
                                  threshold=manifest["config"]["data"]["near_duplicate_threshold"])
-    out = Path(args.out) if args.out else Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,
                             train_fingerprints=fingerprints, related_to_training=frozenset(related),
                             include_training_rows=args.split == "train",

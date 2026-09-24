@@ -116,12 +116,19 @@ def base_source(base: dict, run_dir: Path) -> str:
 
 
 def check_local_base(base: dict, source: str) -> None:
-    """A LoRA run trained on a local base directory is served only on that same content: the run
-    stores the adapter alone, and other weights under the same path would give other answers."""
+    """A LoRA run trained on a local base directory is served only on that same content, and one
+    trained from the hub only from the hub: the run stores the adapter alone, and other weights
+    under the same name would give other answers."""
     from .train import local_base_sha256
 
     pinned = base.get("local_sha256")
     if not pinned:
+        # Trained from the hub: from_pretrained would take a local path of the same name first,
+        # and nothing here could say whether its weights are the recorded revision's.
+        if Path(source).exists():
+            raise ValueError(f"this run's base {source!r} was trained from the hub, but a local path "
+                             f"{Path(source).resolve()} of that name exists here and would be loaded "
+                             "instead; run from another directory or move it")
         return
     if not Path(source).is_dir():
         raise FileNotFoundError(f"base model directory {source} is gone; this LoRA run stores only "

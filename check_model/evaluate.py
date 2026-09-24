@@ -28,6 +28,9 @@ from pathlib import Path
 
 from .adapter import input_key
 
+#: What evaluate_rows writes into its out_dir.
+EVAL_OUTPUT_FILES = ("predictions.jsonl", "metrics.json")
+
 
 def input_fingerprint(query: dict) -> str:
     """A training input's identity independent of its id: a record renamed after training keeps
@@ -173,8 +176,8 @@ def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], o
         "inference": inference,
         "fields": summarize(scores),
     }
-    with (out_dir / "predictions.jsonl").open("w", encoding="utf-8") as f:
+    with (out_dir / EVAL_OUTPUT_FILES[0]).open("w", encoding="utf-8") as f:
         for rec in records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    (out_dir / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (out_dir / EVAL_OUTPUT_FILES[1]).write_text(json.dumps(metrics, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return metrics

@@ -180,9 +180,14 @@ def _single_checks(annotation: dict, catalog: Catalog) -> list[dict]:
         raise _Invalid(f"check_mode {mode!r} needs exactly {expected} check(s), got {len(checks)}")
     if len(checks) == 2:
         # Unsupported is for a well-formed form this pipeline cannot train, not a damaged one:
-        # each entry passes the same checks a single label does before the pair is set aside.
+        # every entry passes the same checks a single label does before the pair is set aside.
+        # An entry that is itself unsupported (a special skill, say) does not stop the others
+        # being checked: _Invalid from any entry wins.
         for entry in checks:
-            _check_entry(entry, catalog)
+            try:
+                _check_entry(entry, catalog)
+            except _Skip:
+                pass  # the pair is unsupported regardless
         raise _Skip("unsupported", "pair check (check_mode: pair)")
     if len(checks) != 1:
         raise _Invalid(f"roll_required is true with {len(checks)} checks (single needs exactly 1)")

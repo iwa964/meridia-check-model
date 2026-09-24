@@ -343,3 +343,12 @@ def test_a_pair_with_a_damaged_entry_is_an_error_not_unsupported(catalog, subset
     rows, report = load(catalog, write_source(subset))
     assert [m for i, m in messages(report) if i == "dice_train_000044" and m.startswith(message)]
     assert "dice_train_000044" not in {e["id"] for e in report.unsupported}
+
+
+def test_a_damaged_pair_entry_is_an_error_even_after_an_unsupported_one(catalog, subset, write_source):
+    first, second = record(subset, "dice_train_000044")["annotation"]["checks"]
+    first["name"] = catalog.special_skills[0]  # unsupported on its own (not check-based)
+    second.pop("roll_system")                  # damaged
+    rows, report = load(catalog, write_source(subset))
+    assert ("dice_train_000044", "check 'Drawing' has no roll_system") in messages(report)
+    assert "dice_train_000044" not in {e["id"] for e in report.unsupported}

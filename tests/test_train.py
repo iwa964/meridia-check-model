@@ -830,3 +830,26 @@ def test_evaluate_never_writes_into_the_directories_a_run_pins(tiny, tmp_path):
     after = {p: p.read_bytes() for d in (run / "model", base) for p in d.rglob("*") if p.is_file()}
     assert after == before
     main(["evaluate", "--run", str(run), "--split", "val", "--out", str(tmp_path / "elsewhere")])
+
+
+def test_evaluate_never_writes_over_a_source(tiny, tmp_path):
+    import yaml
+
+    from check_model.__main__ import main
+
+    data = tmp_path / "data"
+    data.mkdir()
+    source = data / "metrics.json"  # a source whose name is one of evaluate's outputs
+    source.write_bytes(SUBSET.read_bytes())
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(source)], "catalog": str(Path(__file__).resolve().parent.parent / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+    with pytest.raises(SystemExit, match=r"refusing to evaluate: writing .* would overwrite \[.*metrics.json"):
+        main(["evaluate", "--run", str(run), "--split", "val", "--out", str(data)])
+    assert source.read_bytes() == SUBSET.read_bytes()
