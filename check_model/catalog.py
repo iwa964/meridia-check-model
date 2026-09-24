@@ -93,7 +93,12 @@ class Catalog:
 
 
 def load_catalog(path: str | Path) -> Catalog:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return parse_catalog(Path(path).read_bytes())
+
+
+def parse_catalog(raw: bytes) -> Catalog:
+    """A catalog from the bytes of its JSON file, so a caller can hash exactly what it parses."""
+    data = json.loads(raw.decode("utf-8"))
     return Catalog(
         skills=tuple(data["skills"]),
         attributes=tuple(data["attributes"]),

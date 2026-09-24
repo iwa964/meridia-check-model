@@ -498,3 +498,59 @@ def test_smoke_with_no_trainable_rows_stops_before_any_model(tmp_path, subset, w
     with pytest.raises(SystemExit, match="no trainable general rows"):
         main(["smoke", "--config", str(cfg), "--tiny"])
     assert not (tmp_path / "runs").exists()
+
+
+def test_evaluate_records_inference_and_binds_catalog_and_split_bytes(tiny, tmp_path, monkeypatch):
+    import yaml
+
+    import check_model.__main__ as cli
+    from check_model.__main__ import main
+
+    root = Path(__file__).resolve().parent.parent
+
+    def config(name, **inference):
+        path = tmp_path / f"{name}.yaml"
+        path.write_text(yaml.safe_dump({
+            "data": {"sources": [str(SUBSET)], "catalog": str(root / "catalog" / "meridia_catalog.json"),
+                     "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+            "model": {"base_model": str(tiny["dir"])},
+            "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2},
+            "inference": {"max_new_tokens": 64, **inference}}), encoding="utf-8")
+        return str(path)
+
+    main(["train", "--config", config("run")])
+    (run,) = (tmp_path / "runs").iterdir()
+    metrics = run / "eval" / "val" / "metrics.json"
+
+    # The inference settings are recorded, and an override of the run's max_new_tokens is marked.
+    main(["evaluate", "--run", str(run), "--split", "val"])
+    assert json.loads(metrics.read_text())["inference"]["matches_training"] is True
+    main(["evaluate", "--run", str(run), "--split", "val", "--config", config("short", max_new_tokens=8)])
+    recorded = json.loads(metrics.read_text())["inference"]
+    assert recorded["max_new_tokens"] == 8 and recorded["trained_max_new_tokens"] == 64
+    assert recorded["matches_training"] is False
+
+    # A split file replaced between the hash check and the parse is refused.
+    real_hashes = cli.split_hashes
+    val = tmp_path / "prepared" / "val.jsonl"
+
+    def hash_then_replace(prepared_dir):
+        out = real_hashes(prepared_dir)
+        val.write_text(val.read_text().splitlines()[0] + "\n", encoding="utf-8")
+        return out
+
+    monkeypatch.setattr(cli, "split_hashes", hash_then_replace)
+    with pytest.raises(SystemExit, match="a split file changed while it was being read"):
+        main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])
+    monkeypatch.setattr(cli, "split_hashes", real_hashes)
+    main(["prepare", "--config", config("run")])
+
+    # An edited catalog.json is refused, by evaluate and by serving.
+    catalog_file = run / "catalog.json"
+    catalog_file.write_text(catalog_file.read_text().replace('"Climbing"', '"Climbing2"'), encoding="utf-8")
+    with pytest.raises(SystemExit, match="catalog.json does not match the SHA-256 recorded at training"):
+        main(["evaluate", "--run", str(run), "--split", "val"])
+    from check_model.infer import CheckModel
+
+    with pytest.raises(ValueError, match="the run's label set was edited"):
+        CheckModel(run, max_new_tokens=4)

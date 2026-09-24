@@ -114,9 +114,10 @@ def _reference_problem(reference: dict, catalog=None) -> str | None:
         return "reference.options must be a list of option lists"
     for option in options:
         for check in option:
-            if not (isinstance(check, dict)
-                    and all(isinstance(check.get(k), str) for k in ("kind", "name", "difficulty"))):
-                return "each reference check needs string kind, name and difficulty"
+            if not (isinstance(check, dict) and set(check) == {"kind", "name", "difficulty"}
+                    and all(isinstance(check[k], str) for k in check)):
+                # score() compares whole checks: an extra field could never be matched exactly.
+                return "each reference check needs string kind, name and difficulty, and no other field"
     # What the adapter writes: a roll-required reference has options of 1..MAX_CHECKS checks, a
     # no-roll one only empty options. Anything else would be scored wrong whatever the model says.
     if reference["roll_required"]:
@@ -150,6 +151,9 @@ def _row_problem(row: dict, split: str, catalog=None) -> str | None:
         return "id is blank"
     if row["split"] != split:
         return f"split {row['split']!r} in the {split} file"
+    scope = "game_specific" if split == "test" else "general"  # what assign_splits puts there
+    if row["scope"] != scope:
+        return f"scope {row['scope']!r} in the {split} file, which holds {scope!r} rows"
     for key in ("links", "group_members"):
         if not all(_is_id(i) for i in row[key]):
             return f"{key} must hold ids"
@@ -160,14 +164,17 @@ def _row_problem(row: dict, split: str, catalog=None) -> str | None:
     return _reference_problem(row["reference"], catalog)
 
 
-def read_split(prepared_dir: str | Path, split: str, catalog=None) -> list[dict]:
+def read_split(prepared_dir: str | Path, split: str, catalog=None, hashes: dict | None = None) -> list[dict]:
     """The rows of one prepared split file, each checked against the full row schema: strict UTF-8
     and strict JSON, unique ids, and -- given the run's catalog -- reference labels it accepts."""
     path = Path(prepared_dir) / f"{split}.jsonl"
     if not path.exists():
         raise FileNotFoundError(f"{path} does not exist; run `python -m check_model prepare` first")
+    raw = path.read_bytes()
+    if hashes is not None:  # the hash of exactly the bytes parsed here
+        hashes[split] = hashlib.sha256(raw).hexdigest()
     rows, seen = [], {}
-    for number, data in enumerate(path.read_bytes().split(b"\n"), 1):
+    for number, data in enumerate(raw.split(b"\n"), 1):
         def refuse(problem: str):
             return ValueError(f"{path}:{number}: not a prepared row ({problem}); re-run prepare")
 

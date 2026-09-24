@@ -272,8 +272,8 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
     model_dir = run_dir / "model"
     model.save_pretrained(model_dir)
     tokenizer.save_pretrained(model_dir)
-    (run_dir / "catalog.json").write_text(json.dumps(catalog.to_json(), ensure_ascii=False, indent=2) + "\n",
-                                          encoding="utf-8")
+    catalog_bytes = (json.dumps(catalog.to_json(), ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    (run_dir / "catalog.json").write_bytes(catalog_bytes)
     with (run_dir / "train_log.jsonl").open("w", encoding="utf-8") as f:
         for entry in trainer.state.log_history:
             f.write(json.dumps(entry) + "\n")
@@ -294,6 +294,9 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
             "trust_remote_code": model_cfg["trust_remote_code"],
         },
         "adapter": "lora" if lora_cfg["enabled"] else None,
+        # catalog.json decides which labels the run's replies may use and which references are
+        # valid; serving and evaluation refuse a copy that no longer matches this.
+        "catalog_sha256": hashlib.sha256(catalog_bytes).hexdigest(),
         "config": config,
         "precision": precision,
         "max_steps_used": steps,

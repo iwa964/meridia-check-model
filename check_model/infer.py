@@ -12,11 +12,12 @@ model is asked or how its answers are checked.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 from . import prompt
-from .catalog import load_catalog
+from .catalog import Catalog, parse_catalog
 
 
 def base_revision(base: dict) -> str | None:
@@ -52,6 +53,15 @@ def check_local_base(base: dict, source: str) -> None:
     if now != pinned:
         raise ValueError(f"base model directory {source} changed since training (content "
                          f"{now[:12]}, trained on {pinned[:12]}); the adapter would run on other weights")
+
+
+def load_run_catalog(run_dir: str | Path, manifest: dict) -> Catalog:
+    """The run's own catalog, refused unless it is the one recorded at training."""
+    raw = (Path(run_dir) / "catalog.json").read_bytes()
+    if hashlib.sha256(raw).hexdigest() != manifest.get("catalog_sha256"):
+        raise ValueError(f"{Path(run_dir) / 'catalog.json'} does not match the SHA-256 recorded at training; "
+                         "the run's label set was edited")
+    return parse_catalog(raw)
 
 
 def check_format(manifest: dict) -> None:
@@ -97,7 +107,7 @@ class CheckModel:
         self.manifest = json.loads((self.run_dir / "run_manifest.json").read_text(encoding="utf-8"))
         check_format(self.manifest)
         self.system = self.manifest["prompt"]["system_prompt"]
-        self.catalog = load_catalog(self.run_dir / "catalog.json")
+        self.catalog = load_run_catalog(self.run_dir, self.manifest)
         model_dir = self.run_dir / "model"
         base = self.manifest["base_model"]
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")

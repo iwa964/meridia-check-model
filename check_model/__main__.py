@@ -130,12 +130,11 @@ def _data_mismatch(config: dict, manifest: dict, rows: list[dict] | None = None)
     return None
 
 
-def _changed_splits(config: dict, manifest: dict) -> list[dict]:
-    """Prepared split files whose content differs from the ones the run was trained from. The
-    same sources and settings can still give different rows after an adapter or splitter change,
-    and a split file can be edited or replaced after `prepare`; so the files are hashed now."""
+def _changed_splits(manifest: dict, now: dict) -> list[dict]:
+    """Prepared split files whose content (`now`, hashed from the files) differs from the ones the
+    run was trained from. The same sources and settings can still give different rows after an
+    adapter or splitter change, and a split file can be edited or replaced after `prepare`."""
     trained = manifest["examples"].get("split_sha256") or {}
-    now = split_hashes(config["data"]["prepared_dir"])
     return [{"split": s, "trained_sha256": trained.get(s), "prepared_sha256": now.get(s)}
             for s in ("train", "val", "test") if trained.get(s) != now.get(s)]
 
@@ -157,7 +156,6 @@ def _changed_sources(config: dict, manifest: dict) -> list[dict]:
 
 
 def cmd_predict(args) -> None:
-    _require_training_stack()
     from .infer import check_format
 
     config = _run_config(args)
@@ -196,6 +194,7 @@ class _LazyModel:
             # the tokenizer to tell, so it does load the model.)
             return [bad_query_result(prompt.query_errors(q)) for q in queries]
         if self._model is None:
+            _require_training_stack()  # only now: a batch or split with nothing to run needs none
             from .infer import CheckModel
 
             self._model = CheckModel(self._args[0], **self._args[1])
@@ -203,10 +202,8 @@ class _LazyModel:
 
 
 def cmd_evaluate(args) -> None:
-    _require_training_stack()
     from .evaluate import evaluate_rows, training_relatives
-    from .catalog import load_catalog
-    from .infer import check_format
+    from .infer import check_format, load_run_catalog
     from .prepare import duplicate_ids, read_split
 
     config = _run_config(args)
@@ -218,7 +215,8 @@ def cmd_evaluate(args) -> None:
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
     changed = _changed_sources(config, manifest)
-    changed_splits = _changed_splits(config, manifest)
+    split_now = split_hashes(config["data"]["prepared_dir"])
+    changed_splits = _changed_splits(manifest, split_now)
     if (changed or changed_splits) and not args.allow_data_change:
         listed = "; ".join(
             [f"{c['path']}: trained on {_short(c['trained_sha256'])}, "
@@ -228,11 +226,16 @@ def cmd_evaluate(args) -> None:
         sys.exit(f"refusing to evaluate: the prepared data is not the revision the run was trained on ({listed}). "
                  "Pass --allow-data-change to score it anyway; trained rows stay excluded and the metrics "
                  "record the change.")
-    catalog = load_catalog(Path(args.run) / "catalog.json")  # the labels this run can answer with
+    parsed_hashes: dict = {}
     try:
-        splits = {s: read_split(config["data"]["prepared_dir"], s, catalog) for s in ("train", "val", "test")}
+        catalog = load_run_catalog(Path(args.run), manifest)  # the labels this run can answer with
+        splits = {s: read_split(config["data"]["prepared_dir"], s, catalog, parsed_hashes)
+                  for s in ("train", "val", "test")}
     except (ValueError, FileNotFoundError) as exc:
         sys.exit(f"refusing to evaluate: {exc}")
+    if parsed_hashes != split_now:
+        # data_revision below describes the bytes hashed above; these are the bytes scored.
+        sys.exit("refusing to evaluate: a split file changed while it was being read; run evaluate again")
     repeated = duplicate_ids(splits)
     if repeated:
         sys.exit(f"refusing to evaluate: ids in more than one split file: {repeated}; re-run prepare")
@@ -256,6 +259,10 @@ def cmd_evaluate(args) -> None:
                             include_training_rows=args.split == "train",
                             data_revision={"matches_training": not (changed or changed_splits),
                                            "changed_sources": changed, "changed_splits": changed_splits},
+                            inference={**config["inference"],
+                                       "trained_max_new_tokens": manifest["config"]["inference"]["max_new_tokens"],
+                                       "matches_training": config["inference"]["max_new_tokens"]
+                                       == manifest["config"]["inference"]["max_new_tokens"]},
                             batch_size=config["inference"]["batch_size"])
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
     print(f"per-example predictions: {Path(out) / 'predictions.jsonl'}")

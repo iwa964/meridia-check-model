@@ -1,4 +1,5 @@
 import json
+import sys
 import re
 from pathlib import Path
 
@@ -425,3 +426,41 @@ def test_a_damaged_provenance_file_is_a_refusal(tmp_path, content, problem):
     (tmp_path / "splits_provenance.json").write_text(content, encoding="utf-8")
     config = {"data": {"prepared_dir": str(tmp_path)}}
     assert problem in _data_mismatch(config, {"config": {"data": {"sources": []}}, "prompt": {"language": "en"}})
+
+
+@pytest.mark.parametrize("split, scope", [("val", "game_specific"), ("test", "general")])
+def test_each_split_holds_only_its_scope(tmp_path, split, scope):
+    from check_model.prepare import read_split
+
+    row = {**VALID_ROW, "split": split, "scope": scope}
+    (tmp_path / f"{split}.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=re.escape(f"scope {scope!r} in the {split} file")):
+        read_split(tmp_path, split)
+
+
+def test_a_reference_check_with_an_extra_field_is_named(tmp_path):
+    from check_model.prepare import read_split
+
+    check = {"kind": "skill", "name": "Climbing", "difficulty": "hard", "comment": "legacy"}
+    row = {**VALID_ROW, "reference": {"roll_required": True, "options": [[check]]}}
+    (tmp_path / "val.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="and no other field"):
+        read_split(tmp_path, "val")
+
+
+def test_predict_needs_no_training_stack_when_nothing_can_run(tmp_path, monkeypatch, capsys):
+    import check_model.__main__ as cli
+    from check_model.prompt import PROMPT_FORMAT_VERSION, prompt_sha256
+
+    monkeypatch.setattr(cli, "_require_training_stack", lambda: sys.exit("peft is not installed"))
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "run_manifest.json").write_text(json.dumps({"prompt": {
+        "format_version": PROMPT_FORMAT_VERSION, "system_prompt": "p", "system_prompt_sha256": prompt_sha256("p")}}),
+        encoding="utf-8")
+    source = tmp_path / "queries.json"
+    source.write_text('[{"scene": ""}]', encoding="utf-8")
+    config = tmp_path / "empty.yaml"
+    config.write_text("", encoding="utf-8")
+    main(["predict", "--run", str(run), "--config", str(config), "--input", str(source)])
+    assert json.loads(capsys.readouterr().out)[0]["errors"][0].startswith("bad query: ")

@@ -114,6 +114,7 @@ def summarize(scored: list[dict]) -> dict:
 def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], out_dir: str | Path,
                   include_training_rows: bool = False, batch_size: int = 8,
                   data_revision: dict | None = None, train_fingerprints: frozenset[str] = frozenset(),
+                  inference: dict | None = None,
                   related_to_training: frozenset[str] = frozenset()) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +164,9 @@ def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], o
         "excluded_trained_rows": [] if include_training_rows else sorted(r["id"] for r in seen),
         "excluded_related_rows": [] if include_training_rows else sorted(r["id"] for r in related),
         "data_revision": data_revision,
+        # The settings the predictions were generated with; max_new_tokens changes answers, so an
+        # override of the run's value (--config) is marked rather than passed off as the run's.
+        "inference": inference,
         "fields": summarize(scores),
     }
     with (out_dir / "predictions.jsonl").open("w", encoding="utf-8") as f:
