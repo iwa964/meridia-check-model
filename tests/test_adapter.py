@@ -234,3 +234,22 @@ def test_an_inconsistent_optional_roll_is_an_error_not_a_label(catalog, subset, 
     rows, report = load(catalog, write_source(subset))
     assert ("dice_train_000040", message) in messages(report)
     assert "dice_train_000040" not in {r.id for r in rows if r.target is not None}
+
+
+@pytest.mark.parametrize("mode, message", [
+    ("pair", "check_mode 'pair' contradicts roll_required: false"),
+    ("singel", "check_mode must be single or pair, got 'singel'")])
+def test_a_no_roll_label_with_a_check_mode_is_an_error(catalog, subset, write_source, mode, message):
+    from helpers import clone
+
+    # 000040's no-roll label without its optional-roll part: a plain no-roll label.
+    no_roll = clone(subset, "dice_train_000040", "dice_train_000940")
+    no_roll["scene"]["en"] = "A variation. " + no_roll["scene"]["en"]
+    for key in ("roll_optional", "optional_roll"):
+        no_roll["annotation"].pop(key)
+    subset["examples"].append(no_roll)
+    rows, report = load(catalog, write_source(subset))
+    assert "dice_train_000940" in {r.id for r in rows if r.target is not None}  # control: accepted as is
+    no_roll["annotation"]["check_mode"] = mode
+    rows, report = load(catalog, write_source(subset))
+    assert ("dice_train_000940", message) in messages(report)

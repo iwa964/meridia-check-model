@@ -206,6 +206,13 @@ def test_each_tiny_smoke_run_keeps_its_own_base(tmp_path, monkeypatch):
     query.write_text(json.dumps({"scene": "A cliff.", "player_action": "I climb it."}), encoding="utf-8")
     main(["predict", "--run", str(runs[1]), "--input", str(query)])
 
+    # The base is found from the run itself: moved elsewhere and invoked from another directory.
+    moved = tmp_path / "archive" / runs[1].name
+    shutil.move(str(runs[1]), moved)
+    (tmp_path / "elsewhere").mkdir()
+    monkeypatch.chdir(tmp_path / "elsewhere")
+    main(["predict", "--run", str(moved), "--input", str(query)])
+
 
 def test_evaluate_uses_the_runs_own_data_and_refuses_another(tiny, tmp_path, monkeypatch):
     import yaml
@@ -388,6 +395,12 @@ def test_evaluate_refuses_split_contents_that_changed_with_the_same_sources(tiny
     with pytest.raises(SystemExit, match=r"val\.jsonl:2: not a prepared row"):
         main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])
 
+    # A split file gone altogether, with --allow-data-change: named, not a traceback.
+    main(["prepare", "--config", str(cfg)])  # clean splits again
+    (tmp_path / "prepared" / "test.jsonl").unlink()
+    with pytest.raises(SystemExit, match=r"test\.jsonl does not exist"):
+        main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])
+
 
 def test_the_manifest_records_every_training_scenario_member(tiny, tmp_path):
     from check_model.train import train
@@ -437,3 +450,29 @@ def test_a_lora_run_is_served_only_on_the_local_base_it_was_trained_on(tiny, tmp
     shutil.rmtree(base)
     with pytest.raises(FileNotFoundError, match="is gone"):
         CheckModel(run, max_new_tokens=4)
+
+
+def test_an_evaluation_with_nothing_to_score_never_loads_the_model(tiny, tmp_path, monkeypatch):
+    import yaml
+
+    import check_model.infer as infer
+    from check_model.__main__ import main
+
+    root = Path(__file__).resolve().parent.parent
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(SUBSET)], "catalog": str(root / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+
+    def no_model(*args, **kwargs):
+        raise AssertionError("the model was loaded for an evaluation that scores nothing")
+
+    monkeypatch.setattr(infer, "CheckModel", no_model)
+    main(["evaluate", "--run", str(run), "--split", "test"])  # the fixture has no game_specific rows
+    metrics = json.loads((run / "eval" / "test" / "metrics.json").read_text())
+    assert metrics["scored"] == 0 and "empty" in metrics["note"]

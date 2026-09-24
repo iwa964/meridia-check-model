@@ -157,10 +157,27 @@ def cmd_predict(args) -> None:
     print(json.dumps(results[0] if single else results, ensure_ascii=False, indent=2))
 
 
+class _LazyModel:
+    """A CheckModel built on the first prediction. An evaluation that scores nothing (an empty
+    split, or every row trained on or related) then never downloads or loads a base model."""
+
+    def __init__(self, run_dir: str, **kwargs):
+        self._args, self._model = (run_dir, kwargs), None
+
+    def predict_many(self, queries: list[dict], batch_size: int = 8) -> list[dict]:
+        if not queries:
+            return []
+        if self._model is None:
+            from .infer import CheckModel
+
+            self._model = CheckModel(self._args[0], **self._args[1])
+        return self._model.predict_many(queries, batch_size=batch_size)
+
+
 def cmd_evaluate(args) -> None:
     _require_training_stack()
     from .evaluate import evaluate_rows, training_relatives
-    from .infer import CheckModel
+    from .infer import check_format
     from .prepare import read_split
 
     config = _run_config(args)
@@ -184,13 +201,14 @@ def cmd_evaluate(args) -> None:
                  "record the change.")
     try:
         splits = {s: read_split(config["data"]["prepared_dir"], s) for s in ("train", "val", "test")}
-    except ValueError as exc:
+    except (ValueError, FileNotFoundError) as exc:
         sys.exit(f"refusing to evaluate: {exc}")
     rows = splits[args.split]
     mismatch = _data_mismatch(config, manifest, rows)  # now with the rows' language
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
-    model = CheckModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
+    check_format(manifest)  # refused even when nothing turns out to need the model
+    model = _LazyModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
     train_ids = set(manifest["examples"]["train_ids"])
     fingerprints = frozenset(manifest["examples"].get("train_fingerprints", []))
     all_rows = [r for s in ("train", "val", "test") for r in splits[s]]

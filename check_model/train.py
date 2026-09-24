@@ -164,6 +164,17 @@ def load_tokenizer(name_or_path: str, revision: str | None, trust_remote_code: b
     return tokenizer
 
 
+def _path_in(path: str, directory: Path) -> str | None:
+    """`path` relative to `directory` when it is a directory inside it, else None."""
+    candidate = Path(path)
+    if not candidate.is_dir():
+        return None
+    try:
+        return candidate.resolve().relative_to(directory.resolve()).as_posix()
+    except ValueError:
+        return None
+
+
 def local_base_sha256(name_or_path: str) -> str | None:
     """SHA-256 over every file (relative path and content) of a local base-model directory, or
     None for a hub name, which the recorded revision pins instead. A LoRA run stores only its
@@ -277,6 +288,9 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
             "revision": model_cfg["revision"],
             "resolved_commit": getattr(base_config, "_commit_hash", None),
             "local_sha256": base_sha256,
+            # A base kept inside the run (smoke --tiny) is found from the run, wherever it is moved
+            # or invoked from; name_or_path alone would be resolved against the working directory.
+            "in_run": _path_in(model_cfg["base_model"], run_dir),
             "trust_remote_code": model_cfg["trust_remote_code"],
         },
         "adapter": "lora" if lora_cfg["enabled"] else None,

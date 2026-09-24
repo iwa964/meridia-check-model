@@ -26,7 +26,12 @@ def base_revision(base: dict) -> str | None:
     return base.get("resolved_commit") or base.get("revision")
 
 
-def check_local_base(base: dict) -> None:
+def base_source(base: dict, run_dir: Path) -> str:
+    """Where to load the base from: inside the run when it was kept there, else as recorded."""
+    return str(Path(run_dir) / base["in_run"]) if base.get("in_run") else base["name_or_path"]
+
+
+def check_local_base(base: dict, source: str) -> None:
     """A LoRA run trained on a local base directory is served only on that same content: the run
     stores the adapter alone, and other weights under the same path would give other answers."""
     from .train import local_base_sha256
@@ -34,12 +39,12 @@ def check_local_base(base: dict) -> None:
     pinned = base.get("local_sha256")
     if not pinned:
         return
-    if not Path(base["name_or_path"]).is_dir():
-        raise FileNotFoundError(f"base model directory {base['name_or_path']} is gone; this LoRA run stores only "
+    if not Path(source).is_dir():
+        raise FileNotFoundError(f"base model directory {source} is gone; this LoRA run stores only "
                                 "its adapter and needs the base it was trained on")
-    now = local_base_sha256(base["name_or_path"])
+    now = local_base_sha256(source)
     if now != pinned:
-        raise ValueError(f"base model directory {base['name_or_path']} changed since training (content "
+        raise ValueError(f"base model directory {source} changed since training (content "
                          f"{now[:12]}, trained on {pinned[:12]}); the adapter would run on other weights")
 
 
@@ -92,10 +97,10 @@ class CheckModel:
         if self.manifest["adapter"] == "lora":
             from peft import PeftModel
 
-            check_local_base(base)
-
+            source = base_source(base, self.run_dir)
+            check_local_base(base, source)
             model = AutoModelForCausalLM.from_pretrained(
-                base["name_or_path"], revision=base_revision(base), dtype=dtype,
+                source, revision=base_revision(base), dtype=dtype,
                 trust_remote_code=base["trust_remote_code"])
             model = PeftModel.from_pretrained(model, model_dir)
         else:

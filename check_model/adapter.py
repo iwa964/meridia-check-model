@@ -164,13 +164,16 @@ def _single_checks(annotation: dict, catalog: Catalog) -> list[dict]:
     checks = annotation.get("checks")
     if not isinstance(checks, list):
         raise _Invalid("checks must be a list")
-    if not roll_required:
-        if checks:
-            raise _Invalid("roll_required is false but checks is not empty")
-        return []
     mode = annotation.get("check_mode")
     if mode not in (None, "single", "pair"):
         raise _Invalid(f"check_mode must be single or pair, got {mode!r}")
+    if not roll_required:
+        if checks:
+            raise _Invalid("roll_required is false but checks is not empty")
+        if mode is not None:
+            # A mode describes the checks to roll; on a no-roll label it contradicts the label.
+            raise _Invalid(f"check_mode {mode!r} contradicts roll_required: false")
+        return []
     if mode == "pair" or len(checks) == 2:
         raise _Skip("unsupported", "pair check (check_mode: pair)")
     if len(checks) != 1:
