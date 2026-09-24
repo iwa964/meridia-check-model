@@ -178,6 +178,10 @@ The query needs `scene`, exactly one of `player_action` / `observed_event`, and 
 python -m check_model evaluate --run runs/<run> --split val    # or test / train
 ```
 
+`evaluate` and `predict` use the config the run was trained with. Pass `--config` to override it;
+`evaluate` then refuses prepared data whose sources or prompt language differ from the run's,
+since scoring another experiment's data would still print plausible metrics.
+
 Results are written to `runs/<run>/eval/<split>/`:
 
 - `metrics.json` — one entry per field

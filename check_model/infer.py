@@ -57,7 +57,7 @@ class CheckModel:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         dtype = serving_dtype(self.manifest["precision"], self.device)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_dir)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=base["trust_remote_code"])
         self.tokenizer.padding_side = "left"  # decoder-only batch generation
         if self.manifest["adapter"] == "lora":
             from peft import PeftModel

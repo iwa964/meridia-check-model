@@ -128,10 +128,75 @@ def test_each_tiny_smoke_run_keeps_its_own_base(tmp_path, monkeypatch):
         "data": {"sources": [str(SUBSET)], "catalog": str(root / "catalog" / "meridia_catalog.json"),
                  "prepared_dir": str(tmp_path / "build" / "data")},
         "train": {"output_dir": str(tmp_path / "runs"), "per_device_train_batch_size": 2},
+        "inference": {"batch_size": 1},
         "smoke": {"max_steps": 1}}), encoding="utf-8")
+    import check_model.evaluate as evaluate
+
+    batch_sizes = []
+    original = evaluate.evaluate_rows
+
+    def spy(*args, **kwargs):
+        batch_sizes.append(kwargs.get("batch_size"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(evaluate, "evaluate_rows", spy)
     main(["smoke", "--config", str(cfg), "--tiny"])
     main(["smoke", "--config", str(cfg), "--tiny"])
+    assert batch_sizes == [1, 1]  # the configured inference batch size, not evaluate_rows' default
     bases = [json.loads(m.read_text())["base_model"]["name_or_path"]
              for m in sorted((tmp_path / "runs").glob("*/run_manifest.json"))]
     assert len(bases) == 2 and bases[0] != bases[1]
     assert all(Path(b, "config.json").exists() for b in bases)
+
+
+def test_evaluate_uses_the_runs_own_data_and_refuses_another(tiny, tmp_path, monkeypatch):
+    import yaml
+
+    from check_model.__main__ import main
+
+    root = Path(__file__).resolve().parent.parent
+
+    def config(name, **data):
+        path = tmp_path / f"{name}.yaml"
+        path.write_text(yaml.safe_dump({
+            "data": {"sources": [str(SUBSET)], "catalog": str(root / "catalog" / "meridia_catalog.json"),
+                     "prepared_dir": str(tmp_path / name), "val_fraction": 0.5, **data},
+            "model": {"base_model": str(tiny["dir"])},
+            "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+            encoding="utf-8")
+        return str(path)
+
+    main(["train", "--config", config("en")])
+    (run,) = (tmp_path / "runs").iterdir()
+    monkeypatch.chdir(tmp_path)  # no configs/sft_example.yaml here: only the run's config can be used
+    main(["evaluate", "--run", str(run), "--split", "val"])
+    assert (run / "eval" / "val" / "metrics.json").exists()
+
+    main(["prepare", "--config", config("zh", language="zh")])
+    with pytest.raises(SystemExit, match="prompts are in 'en'"):
+        main(["evaluate", "--run", str(run), "--split", "val", "--config", config("zh", language="zh")])
+
+
+def test_serving_honours_trust_remote_code_for_the_tokenizer(tiny, tmp_path, monkeypatch):
+    import transformers
+
+    from check_model.infer import CheckModel
+    from check_model.train import train
+
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(tiny["dir"])
+    run = tmp_path / "run"
+    train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
+    manifest = json.loads((run / "run_manifest.json").read_text())
+    manifest["base_model"]["trust_remote_code"] = True
+    (run / "run_manifest.json").write_text(json.dumps(manifest))
+    seen = []
+    original = transformers.AutoTokenizer.from_pretrained
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("trust_remote_code"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", spy)
+    CheckModel(run, max_new_tokens=4)
+    assert seen == [True]

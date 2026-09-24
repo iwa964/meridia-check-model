@@ -69,11 +69,35 @@ def cmd_train(args) -> None:
     print(f"saved {run_dir}")
 
 
+def _run_config(args) -> dict:
+    """The run's own recorded config, unless --config names another one."""
+    if args.config is not None:
+        return load_config(args.config)
+    manifest = json.loads((Path(args.run) / "run_manifest.json").read_text(encoding="utf-8"))
+    return manifest["config"]
+
+
+def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None:
+    """Why the prepared data is not the data this run was trained on, or None. Scoring a run on
+    another experiment's prepared files would still print plausible metrics."""
+    prepared = Path(config["data"]["prepared_dir"])
+    report = json.loads((prepared / "report.json").read_text(encoding="utf-8"))
+    have = [s["path"] for s in report["sources"]]
+    want = list(manifest["config"]["data"]["sources"])
+    if have != want:
+        return f"{prepared} was prepared from {have}, but the run was trained on {want}"
+    lang = manifest["prompt"]["language"]
+    other = sorted({r["lang"] for r in rows} - {lang})
+    if other:
+        return f"{prepared} holds {other} rows, but the run's prompts are in {lang!r}"
+    return None
+
+
 def cmd_predict(args) -> None:
     _require_training_stack()
     from .infer import CheckModel
 
-    config = load_config(args.config)
+    config = _run_config(args)
     text = Path(args.input).read_text(encoding="utf-8") if args.input != "-" else sys.stdin.read()
     queries = json.loads(text)
     single = isinstance(queries, dict)
@@ -88,9 +112,12 @@ def cmd_evaluate(args) -> None:
     from .infer import CheckModel
     from .prepare import read_split
 
-    config = load_config(args.config)
+    config = _run_config(args)
     rows = read_split(config["data"]["prepared_dir"], args.split)
     model = CheckModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
+    mismatch = _data_mismatch(config, model.manifest, rows)
+    if mismatch:
+        sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
     train_ids = set(model.manifest["examples"]["train_ids"])
     out = args.out or Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,
@@ -153,7 +180,8 @@ def cmd_smoke(args) -> None:
     done("reload", f"base {manifest['base_model']['name_or_path']} + adapter from {run_dir / 'model'}")
 
     metrics = evaluate_rows(model, picked, split="train", train_ids={r["id"] for r in picked},
-                            out_dir=run_dir / "eval" / "smoke", include_training_rows=True)
+                            out_dir=run_dir / "eval" / "smoke", include_training_rows=True,
+                            batch_size=config["inference"]["batch_size"])
     sample = json.loads((run_dir / "eval" / "smoke" / "predictions.jsonl").read_text().splitlines()[0])
     done("inference", f"{metrics['scored']} predictions; first raw output: {sample['raw_output']!r}")
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
@@ -184,13 +212,14 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("predict", help="run a trained model on query JSON (one object or a list)")
     p.add_argument("--run", required=True)
     p.add_argument("--input", required=True, help="a JSON file, or - for stdin")
-    p.add_argument("--config", default="configs/sft_example.yaml")
+    p.add_argument("--config", default=None, help="default: the config the run was trained with")
     p.set_defaults(func=cmd_predict)
 
     p = sub.add_parser("evaluate", help="score a trained run on a prepared split")
     p.add_argument("--run", required=True)
     p.add_argument("--split", choices=("val", "test", "train"), default="val")
-    p.add_argument("--config", default="configs/sft_example.yaml")
+    p.add_argument("--config", default=None,
+                   help="default: the config the run was trained with; another must prepare the same data")
     p.add_argument("--out", default=None)
     p.set_defaults(func=cmd_evaluate)
 
