@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any
 
 from . import strictjson
@@ -108,6 +109,30 @@ def target_text(decision: dict) -> str:
     return json.dumps({"roll_required": decision["roll_required"], "checks": checks}, ensure_ascii=False)
 
 
+def _json_problem(value: Any, where: str) -> str | None:
+    """Why `value` is not plain, finite JSON data, or None. A Python caller can pass a set or a
+    NaN, which json.dumps would reject or write as the non-JSON token NaN into the prompt."""
+    if value is None or isinstance(value, (bool, str, int)):
+        return None
+    if isinstance(value, float):
+        return None if math.isfinite(value) else f"{where} is {value!r}, not a finite number"
+    if isinstance(value, list):
+        for i, item in enumerate(value):
+            problem = _json_problem(item, f"{where}[{i}]")
+            if problem:
+                return problem
+        return None
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                return f"{where} has a non-string key {key!r}"
+            problem = _json_problem(item, f"{where}.{key}")
+            if problem:
+                return problem
+        return None
+    return f"{where} holds a {type(value).__name__}, which is not JSON"
+
+
 def query_errors(query: Any) -> list[str]:
     """Why a query is not in the input format, or []."""
     if not isinstance(query, dict):
@@ -120,8 +145,13 @@ def query_errors(query: Any) -> list[str]:
         errors.append("exactly one of player_action / observed_event is required")
     elif not isinstance(query[actions[0]], str) or not query[actions[0]].strip():
         errors.append(f"{actions[0]} must be a non-empty string")
-    if "runtime_state" in query and not isinstance(query["runtime_state"], dict):
-        errors.append("runtime_state must be an object")
+    if "runtime_state" in query:
+        if not isinstance(query["runtime_state"], dict):
+            errors.append("runtime_state must be an object")
+        else:
+            problem = _json_problem(query["runtime_state"], "runtime_state")
+            if problem:
+                errors.append(problem)
     unknown = set(query) - {"scene", "player_action", "observed_event", "runtime_state"}
     if unknown:
         errors.append(f"unknown fields {sorted(unknown)}")

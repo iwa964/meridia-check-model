@@ -278,3 +278,38 @@ def test_a_prepared_row_missing_what_evaluation_reads_is_named(tmp_path, row, pr
     (tmp_path / "val.jsonl").write_text(json.dumps(VALID_ROW) + "\n" + json.dumps(row) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match=r"val\.jsonl:2: not a prepared row \(" + re.escape(problem)):
         read_split(tmp_path, "val")
+
+
+@pytest.mark.parametrize("reference, problem", [
+    ({}, "reference.roll_required must be true or false"),
+    ({"roll_required": True, "options": [{"kind": "skill"}]}, "reference.options must be a list of option lists"),
+    ({"roll_required": True, "options": [[{"kind": "skill", "name": "Climbing"}]]},
+     "each reference check needs string kind, name and difficulty")])
+def test_a_prepared_reference_of_the_wrong_shape_is_named(tmp_path, reference, problem):
+    from check_model.prepare import read_split
+
+    (tmp_path / "val.jsonl").write_text(json.dumps({**VALID_ROW, "reference": reference}) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"val\.jsonl:1: not a prepared row \(" + re.escape(problem)):
+        read_split(tmp_path, "val")
+
+
+@pytest.mark.parametrize("payload", ["[]", '[{"scene": ""}, {"player_action": "a"}]'])
+def test_predict_loads_no_model_when_no_query_can_run(tmp_path, monkeypatch, capsys, payload):
+    import check_model.infer as infer
+    from check_model.prompt import PROMPT_FORMAT_VERSION
+
+    def no_model(*args, **kwargs):
+        raise AssertionError("the model was loaded for a batch with nothing to generate")
+
+    monkeypatch.setattr(infer, "CheckModel", no_model)
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "run_manifest.json").write_text(json.dumps({"prompt": {"format_version": PROMPT_FORMAT_VERSION}}),
+                                           encoding="utf-8")
+    source = tmp_path / "queries.json"
+    source.write_text(payload, encoding="utf-8")
+    config = tmp_path / "empty.yaml"
+    config.write_text("", encoding="utf-8")
+    main(["predict", "--run", str(run), "--config", str(config), "--input", str(source)])
+    results = json.loads(capsys.readouterr().out)
+    assert all(not r["valid"] and r["errors"][0].startswith("bad query: ") for r in results)

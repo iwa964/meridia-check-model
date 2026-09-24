@@ -476,3 +476,25 @@ def test_an_evaluation_with_nothing_to_score_never_loads_the_model(tiny, tmp_pat
     main(["evaluate", "--run", str(run), "--split", "test"])  # the fixture has no game_specific rows
     metrics = json.loads((run / "eval" / "test" / "metrics.json").read_text())
     assert metrics["scored"] == 0 and "empty" in metrics["note"]
+
+
+def test_smoke_with_no_trainable_rows_stops_before_any_model(tmp_path, subset, write_source, monkeypatch):
+    import yaml
+
+    import check_model.tiny as tiny_module
+    from check_model.__main__ import main
+
+    def no_model(*args, **kwargs):
+        raise AssertionError("a base model was built for a smoke run with nothing to train")
+
+    monkeypatch.setattr(tiny_module, "make_tiny_model", no_model)
+    subset["scenario_scope"] = "game_specific"  # every row goes to test; none is a general training row
+    root = Path(__file__).resolve().parent.parent
+    cfg = tmp_path / "smoke.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(write_source(subset))], "catalog": str(root / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "build" / "data")},
+        "train": {"output_dir": str(tmp_path / "runs")}}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="no trainable general rows"):
+        main(["smoke", "--config", str(cfg), "--tiny"])
+    assert not (tmp_path / "runs").exists()

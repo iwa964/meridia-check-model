@@ -137,7 +137,7 @@ def _changed_sources(config: dict, manifest: dict) -> list[dict]:
 
 def cmd_predict(args) -> None:
     _require_training_stack()
-    from .infer import CheckModel
+    from .infer import check_format
 
     config = _run_config(args)
     text = Path(args.input).read_text(encoding="utf-8") if args.input != "-" else sys.stdin.read()
@@ -152,21 +152,28 @@ def cmd_predict(args) -> None:
         sys.exit(f"--input {args.input}: expected one query object or a list of them, "
                  f"got {type(queries).__name__}")
     single = isinstance(queries, dict)
-    model = CheckModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
+    check_format(json.loads((Path(args.run) / "run_manifest.json").read_text(encoding="utf-8")))
+    # Built on the first runnable query: an empty list or a batch of bad queries loads nothing.
+    model = _LazyModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
     results = model.predict_many([queries] if single else queries, batch_size=config["inference"]["batch_size"])
     print(json.dumps(results[0] if single else results, ensure_ascii=False, indent=2))
 
 
 class _LazyModel:
-    """A CheckModel built on the first prediction. An evaluation that scores nothing (an empty
-    split, or every row trained on or related) then never downloads or loads a base model."""
+    """A CheckModel built on the first prediction with a runnable query. An evaluation that
+    scores nothing, or a predict batch that is empty or all malformed, never loads a base model."""
 
     def __init__(self, run_dir: str, **kwargs):
         self._args, self._model = (run_dir, kwargs), None
 
     def predict_many(self, queries: list[dict], batch_size: int = 8) -> list[dict]:
-        if not queries:
-            return []
+        from . import prompt
+        from .infer import bad_query_result
+
+        if not any(not prompt.query_errors(q) for q in queries):
+            # Nothing could reach generation: answer without a model. (An over-long query needs
+            # the tokenizer to tell, so it does load the model.)
+            return [bad_query_result(prompt.query_errors(q)) for q in queries]
         if self._model is None:
             from .infer import CheckModel
 
@@ -253,6 +260,8 @@ def cmd_smoke(args) -> None:
     if missing:
         sys.exit(f"smoke example_ids not trainable general rows: {missing}")
     picked = [candidates[i].to_json() for i in ids]
+    if not picked:
+        sys.exit("smoke: no trainable general rows to train on; check the sources and the prepare report")
     if not 5 <= len(picked) <= 10:
         print(f"note: smoke mode is meant for 5-10 examples, got {len(picked)}")
     done("convert", f"{len(picked)} rows: {', '.join(ids)}")

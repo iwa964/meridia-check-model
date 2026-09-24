@@ -174,7 +174,11 @@ def _single_checks(annotation: dict, catalog: Catalog) -> list[dict]:
             # A mode describes the checks to roll; on a no-roll label it contradicts the label.
             raise _Invalid(f"check_mode {mode!r} contradicts roll_required: false")
         return []
-    if mode == "pair" or len(checks) == 2:
+    expected = {"single": 1, "pair": 2}.get(mode)
+    if expected is not None and len(checks) != expected:
+        # A damaged label, not an unsupported form: skipping it would drop it without a word.
+        raise _Invalid(f"check_mode {mode!r} needs exactly {expected} check(s), got {len(checks)}")
+    if len(checks) == 2:
         raise _Skip("unsupported", "pair check (check_mode: pair)")
     if len(checks) != 1:
         raise _Invalid(f"roll_required is true with {len(checks)} checks (single needs exactly 1)")
@@ -278,6 +282,10 @@ def _classify(record: dict, kind: str, catalog: Catalog, lang: str) -> tuple[dic
         options.append(_single_checks(sub, catalog))
     if len(options) < 2:
         raise _Invalid("choice one_of needs at least two alternatives")
+    distinct = {json.dumps(option, sort_keys=True) for option in options}
+    if len(distinct) < len(options):
+        # A copied alternative would turn a one-answer example into an untrained eval-only row.
+        raise _Invalid("alternatives repeat the same choice; one_of needs distinct options")
     return _input(record, lang), {"roll_required": True, "options": options}, None
 
 

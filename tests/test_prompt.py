@@ -92,3 +92,14 @@ def test_a_number_too_large_for_a_float_is_refused(catalog):
     with pytest.raises(ValueError, match="1e999 is out of range"):
         strictjson.loads('{"scene": "s", "runtime_state": {"x": 1e999}}')
     assert strictjson.loads('{"x": 1.5e300, "n": 123456789012345678901234567890}')["x"] == 1.5e300
+
+
+@pytest.mark.parametrize("state, problem", [
+    ({"x": float("nan")}, "runtime_state.x is nan, not a finite number"),
+    ({"x": {1, 2}}, "runtime_state.x holds a set, which is not JSON"),
+    ({"a": [1, {"b": float("inf")}]}, "runtime_state.a[1].b is inf, not a finite number"),
+    ({1: "x"}, "runtime_state has a non-string key 1")])
+def test_runtime_state_must_be_plain_finite_json(state, problem):
+    assert prompt.query_errors({"scene": "s", "player_action": "a", "runtime_state": state}) == [problem]
+    assert prompt.query_errors({"scene": "s", "player_action": "a",
+                                "runtime_state": {"hp": 3, "in_combat": False, "tags": ["a"], "x": 0.5}}) == []

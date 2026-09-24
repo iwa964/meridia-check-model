@@ -26,6 +26,12 @@ def base_revision(base: dict) -> str | None:
     return base.get("resolved_commit") or base.get("revision")
 
 
+def bad_query_result(errors: list[str]) -> dict:
+    """The result for a query that never reaches generation."""
+    return {"valid": False, "decision": None, "game_request": None, "note": None,
+            "errors": ["bad query: " + e for e in errors], "raw_output": None}
+
+
 def base_source(base: dict, run_dir: Path) -> str:
     """Where to load the base from: inside the run when it was kept there, else as recorded."""
     return str(Path(run_dir) / base["in_run"]) if base.get("in_run") else base["name_or_path"]
@@ -152,8 +158,7 @@ class CheckModel:
                 too_long = self.length_error(q)
                 errors = [too_long] if too_long else []
             if errors:
-                results[i] = {"valid": False, "decision": None, "game_request": None, "note": None,
-                              "errors": ["bad query: " + e for e in errors], "raw_output": None}
+                results[i] = bad_query_result(errors)
             else:
                 runnable.append(i)
         for start in range(0, len(runnable), batch_size):

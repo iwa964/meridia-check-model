@@ -277,3 +277,21 @@ def test_the_recorded_hash_is_of_the_bytes_that_were_parsed(catalog, subset, wri
     monkeypatch.setattr(Path, "read_text", then_save_again(real_text))
     _, report = load(catalog, source)
     assert report.sources[0]["sha256"] == hashlib.sha256(parsed).hexdigest()
+
+
+@pytest.mark.parametrize("rid, mode, message", [
+    ("dice_train_000001", "pair", "check_mode 'pair' needs exactly 2 check(s), got 1"),
+    ("dice_train_000044", "single", "check_mode 'single' needs exactly 1 check(s), got 2")])
+def test_a_check_mode_that_disagrees_with_the_checks_is_an_error(catalog, subset, write_source, rid, mode, message):
+    record(subset, rid)["annotation"]["check_mode"] = mode
+    _, report = load(catalog, write_source(subset))
+    assert (rid, message) in messages(report)
+
+
+def test_alternatives_that_repeat_one_choice_are_an_error(catalog, subset, write_source):
+    import copy
+
+    alternatives = record(subset, "dice_train_000038")["annotation"]["alternatives"]
+    alternatives[1] = copy.deepcopy(alternatives[0])
+    _, report = load(catalog, write_source(subset))
+    assert ("dice_train_000038", "alternatives repeat the same choice; one_of needs distinct options") in messages(report)

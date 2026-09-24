@@ -99,6 +99,21 @@ def split_hashes(prepared_dir: str | Path) -> dict[str, str | None]:
 ROW_FIELDS = {"id": str, "source": str, "split": str, "group": str, "input": dict, "reference": dict}
 
 
+def _reference_problem(reference: dict) -> str | None:
+    """Why a reference is not {roll_required: bool, options: [[{kind, name, difficulty}, ...], ...]}."""
+    if not isinstance(reference.get("roll_required"), bool):
+        return "reference.roll_required must be true or false"
+    options = reference.get("options")
+    if not isinstance(options, list) or not all(isinstance(o, list) for o in options):
+        return "reference.options must be a list of option lists"
+    for option in options:
+        for check in option:
+            if not (isinstance(check, dict)
+                    and all(isinstance(check.get(k), str) for k in ("kind", "name", "difficulty"))):
+                return "each reference check needs string kind, name and difficulty"
+    return None
+
+
 def _row_problem(row: dict) -> str | None:
     missing = [k for k in ROW_FIELDS if k not in row]
     if missing:
@@ -106,7 +121,7 @@ def _row_problem(row: dict) -> str | None:
     wrong = [k for k, kind in ROW_FIELDS.items() if not isinstance(row[k], kind)]
     if wrong:
         return f"wrong type for {wrong}"
-    return None
+    return _reference_problem(row["reference"])
 
 
 def read_split(prepared_dir: str | Path, split: str) -> list[dict]:
