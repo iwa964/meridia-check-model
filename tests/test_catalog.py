@@ -149,3 +149,14 @@ def test_sync_refuses_constants_that_are_not_a_list_of_names(tmp_path, attribute
     with pytest.raises(SystemExit, match=message):
         main(["sync-catalog", "--meridia", str(root), "--out", str(out)])
     assert not out.exists()
+
+
+@pytest.mark.parametrize("target", ["Scripts/profile/skill/SkillBank.gd", "server/check_turn.py"])
+def test_sync_never_writes_over_a_file_it_reads(tmp_path, target):
+    from check_model.__main__ import main
+
+    root = fake_meridia(tmp_path / "MeridiaGame")
+    before = (root / target).read_bytes()
+    with pytest.raises(SystemExit, match="refusing to sync the catalog: --out .* a file the catalog is read from"):
+        main(["sync-catalog", "--meridia", str(root), "--out", str(root / target)])
+    assert (root / target).read_bytes() == before

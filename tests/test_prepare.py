@@ -697,11 +697,11 @@ def test_prepare_never_writes_over_a_source_or_the_catalog(tmp_path, subset, nam
         main(["prepare", "--config", config_file(tmp_path, SUBSET, catalog=str(catalog))])
 
 
-@pytest.mark.parametrize("groups", [[[]], [["dice_train_000001"]]])
+@pytest.mark.parametrize("groups", [[[]], [["dice_train_000001"]], [["dice_train_000001", "dice_train_000001"]]])
 def test_an_extra_group_that_cannot_join_two_records_is_refused(tmp_path, groups):
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump({"data": {"extra_groups": groups}}), encoding="utf-8")
-    with pytest.raises(ValueError, match="'data.extra_groups' must be a list of lists of two or more id strings"):
+    with pytest.raises(ValueError, match="'data.extra_groups' must be a list of lists of two or more distinct id strings"):
         load_config(path)
 
 

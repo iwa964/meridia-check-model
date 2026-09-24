@@ -54,9 +54,13 @@ def _run_dir(config: dict, prefix: str) -> Path:
 
 
 def cmd_sync_catalog(args) -> None:
-    from .catalog import sync_from_meridia, write_catalog
+    from .catalog import CHECK_TURN_PATH, SKILL_BANK_PATH, sync_from_meridia, write_catalog
+    from .prepare import overwritten
     from .prompt import system_prompt
 
+    clashes = overwritten([Path(args.out)], [Path(args.meridia) / SKILL_BANK_PATH, Path(args.meridia) / CHECK_TURN_PATH])
+    if clashes:
+        sys.exit(f"refusing to sync the catalog: --out {args.out} is {clashes}, a file the catalog is read from")
     try:
         catalog = sync_from_meridia(args.meridia)
         system_prompt(catalog)  # a difficulty the prompt cannot describe is refused before writing
