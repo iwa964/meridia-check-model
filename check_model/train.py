@@ -124,13 +124,32 @@ def load_dtype(precision: str, lora: bool) -> str:
     return "float32"
 
 
-def model_context_limit(model_cfg: dict) -> int | None:
-    """The base model's positional limit, read from its config before any row is encoded."""
+#: Where model configs keep their context window, in order of preference. Architectures differ.
+CONTEXT_FIELDS = ("max_position_embeddings", "n_positions", "max_seq_len", "max_sequence_length",
+                  "seq_length", "n_ctx")
+#: Tokenizers report "no limit" as a huge sentinel (1e30); anything above this is not a limit.
+_NO_LIMIT = 10_000_000
+
+
+def context_limit_of(config, tokenizer=None) -> int | None:
+    """A model's context window from its config -- or from a nested text config, or, failing
+    both, the tokenizer's model_max_length -- or None when nothing states one."""
+    for source in (config, getattr(config, "text_config", None)):
+        for field in CONTEXT_FIELDS:
+            value = getattr(source, field, None) if source is not None else None
+            if isinstance(value, int) and 0 < value < _NO_LIMIT:
+                return value
+    value = getattr(tokenizer, "model_max_length", None)
+    return value if isinstance(value, int) and 0 < value < _NO_LIMIT else None
+
+
+def model_context_limit(model_cfg: dict, tokenizer=None) -> int | None:
+    """The base model's context window, read from its config before any row is encoded."""
     from transformers import AutoConfig
 
     config = AutoConfig.from_pretrained(model_cfg["base_model"], revision=model_cfg["revision"],
                                         trust_remote_code=model_cfg["trust_remote_code"])
-    return getattr(config, "max_position_embeddings", None)
+    return context_limit_of(config, tokenizer)
 
 
 def load_tokenizer(name_or_path: str, revision: str | None, trust_remote_code: bool):
@@ -161,7 +180,7 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
     catalog = load_catalog(config["data"]["catalog"])
     system = prompt.system_prompt(catalog)
     tokenizer = load_tokenizer(model_cfg["base_model"], model_cfg["revision"], model_cfg["trust_remote_code"])
-    context = model_context_limit(model_cfg)
+    context = model_context_limit(model_cfg, tokenizer)
     train_set, train_stats = encode_all(tokenizer, system, train_rows, train_cfg["max_seq_length"], context)
     val_trainable = [r for r in val_rows if r.get("target") is not None]
     val_set, val_stats = encode_all(tokenizer, system, val_trainable, train_cfg["max_seq_length"], context)
@@ -249,6 +268,9 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
         "examples": {
             "train_ids": [r["id"] for r in train_rows],
             "train_fingerprints": sorted(input_fingerprint(r["input"]) for r in train_rows),
+            # Both languages, so evaluation can still recognise a near-duplicate of a training row
+            # after that row has been removed or rewritten.
+            "train_texts": [r.get("similarity_text", "") for r in train_rows],
             "val_ids": [r["id"] for r in val_rows],
             "source_files": source_files,
         },

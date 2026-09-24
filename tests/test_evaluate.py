@@ -111,3 +111,41 @@ def test_a_renamed_training_row_is_still_excluded(tmp_path):
     metrics = evaluate_rows(EchoModel(decide(CLIMB_EXTREME)), renamed[:1], split="val", train_ids={"old_id"},
                             out_dir=tmp_path, train_fingerprints=frozenset(trained))
     assert metrics["scored"] == 0 and metrics["excluded_trained_rows"] == ["r0"]
+
+
+def _row(rid, group, scene, text=None):
+    query = {"scene": scene, "player_action": "I try it."}
+    return {"id": rid, "group": group, "input": query, "similarity_text": text or scene,
+            "source": "s", "split": "val", "reference": ref(CLIMB_EXTREME)}
+
+
+def test_rows_sharing_a_scenario_with_a_training_row_are_related():
+    from check_model.evaluate import training_relatives
+
+    rows_now = [
+        _row("t1", "t1", "A wet stone wall around a courtyard, three metres high."),         # trained
+        _row("t1b", "t1", "A wet stone wall around a courtyard, three metres high, at dusk."),  # its new sibling
+        _row("x", "x", "A merchant asks fifty copper coins for a used backpack."),           # unrelated
+    ]
+    related = training_relatives(rows_now, train_ids={"t1"}, train_fingerprints=frozenset(),
+                                 train_texts=[], threshold=None)
+    assert related == {"t1b"}
+
+
+def test_a_near_duplicate_of_a_removed_training_row_is_related():
+    from check_model.evaluate import training_relatives
+
+    removed = "The rain has just stopped; a slippery three metre stone wall blocks the courtyard."
+    rows_now = [
+        _row("new", "new", "The rain has just stopped; a slippery three metre stone wall blocks the yard."),
+        _row("x", "x", "A merchant asks fifty copper coins for a used backpack at the market."),
+    ]
+    related = training_relatives(rows_now, train_ids={"gone"}, train_fingerprints=frozenset(),
+                                 train_texts=[removed], threshold=0.38)
+    assert related == {"new"}
+
+
+def test_related_rows_are_excluded_and_listed(tmp_path):
+    metrics = evaluate_rows(EchoModel(decide(CLIMB_EXTREME)), rows(), split="val", train_ids=set(),
+                            out_dir=tmp_path, related_to_training=frozenset({"r1"}))
+    assert metrics["excluded_related_rows"] == ["r1"] and metrics["scored"] == 2

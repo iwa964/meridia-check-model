@@ -187,7 +187,9 @@ since scoring another experiment's data would still print plausible metrics. It 
 source's SHA-256 with the one recorded at training: data edited since then is refused unless you
 pass `--allow-data-change`, and `metrics.json` records the revision either way (`data_revision`).
 Rows the run trained on stay excluded in both cases, matched by id and by input, so a record renamed
-after training is still recognised.
+after training is still recognised. So are rows of the same scenario as a training row: its current
+group, or a near-duplicate of its text (kept in the manifest, so this holds even after the training
+row is removed). `metrics.json` lists them as `excluded_related_rows`.
 
 Results are written to `runs/<run>/eval/<split>/`:
 

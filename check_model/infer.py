@@ -89,7 +89,9 @@ class CheckModel:
         self.generation = GenerationConfig(
             do_sample=False, max_new_tokens=max_new_tokens, pad_token_id=self.tokenizer.pad_token_id,
             eos_token_id=stop if stop is not None else self.tokenizer.eos_token_id)
-        self.context_limit = getattr(self.model.config, "max_position_embeddings", None)
+        from .train import context_limit_of
+
+        self.context_limit = context_limit_of(self.model.config, self.tokenizer)
 
     def render(self, query: dict) -> str:
         return self.tokenizer.apply_chat_template(prompt.messages(self.system, query), tokenize=False,

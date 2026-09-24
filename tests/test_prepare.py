@@ -117,3 +117,34 @@ def test_documented_null_and_list_values_are_accepted(tmp_path):
     assert config["data"]["near_duplicate_threshold"] is None
     assert config["lora"]["target_modules"] == ["q_proj", "v_proj"]
     assert load_config(ROOT / "configs" / "sft_example.yaml") and load_config(ROOT / "configs" / "smoke.yaml")
+
+
+@pytest.mark.parametrize("section, key, value", [
+    ("data", "val_fraction", -0.1), ("data", "val_fraction", float("nan")), ("data", "val_fraction", 1.5),
+    ("data", "near_duplicate_threshold", 2.0), ("train", "warmup_ratio", 1.0),
+])
+def test_values_out_of_range_are_refused(tmp_path, section, key, value):
+    path = tmp_path / "bad.yaml"
+    path.write_text(yaml.safe_dump({section: {key: value}}), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"config key '{section}.{key}' must be in"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("config, tokenizer, expected", [
+    ({"max_position_embeddings": 4096}, None, 4096),
+    ({"n_positions": 1024}, None, 1024),                   # GPT-2 style
+    ({"max_seq_len": 2048}, None, 2048),
+    ({"text_config": {"max_position_embeddings": 8192}}, None, 8192),  # nested text model
+    ({}, {"model_max_length": 512}, 512),                 # only the tokenizer says
+    ({}, {"model_max_length": int(1e30)}, None),          # the tokenizer's "no limit" sentinel
+    ({}, None, None),
+])
+def test_context_limit_is_read_from_the_usual_fields(config, tokenizer, expected):
+    from types import SimpleNamespace
+
+    from check_model.train import context_limit_of
+
+    def ns(d):
+        return SimpleNamespace(**{k: ns(v) if isinstance(v, dict) else v for k, v in d.items()})
+
+    assert context_limit_of(ns(config), ns(tokenizer) if tokenizer else None) == expected

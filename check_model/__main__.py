@@ -128,7 +128,7 @@ def cmd_predict(args) -> None:
 
 def cmd_evaluate(args) -> None:
     _require_training_stack()
-    from .evaluate import evaluate_rows
+    from .evaluate import evaluate_rows, training_relatives
     from .infer import CheckModel
     from .prepare import read_split
 
@@ -147,9 +147,13 @@ def cmd_evaluate(args) -> None:
                  "record the change.")
     train_ids = set(model.manifest["examples"]["train_ids"])
     fingerprints = frozenset(model.manifest["examples"].get("train_fingerprints", []))
+    all_rows = [r for s in ("train", "val", "test") for r in read_split(config["data"]["prepared_dir"], s)]
+    related = training_relatives(all_rows, train_ids=train_ids, train_fingerprints=fingerprints,
+                                 train_texts=model.manifest["examples"].get("train_texts", []),
+                                 threshold=model.manifest["config"]["data"]["near_duplicate_threshold"])
     out = args.out or Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,
-                            train_fingerprints=fingerprints,
+                            train_fingerprints=fingerprints, related_to_training=frozenset(related),
                             include_training_rows=args.split == "train",
                             data_revision={"matches_training": not changed, "changed_sources": changed},
                             batch_size=config["inference"]["batch_size"])

@@ -67,6 +67,8 @@ def test_train_save_reload_predict(tiny, tmp_path):
     from check_model.evaluate import input_fingerprint
 
     assert saved["examples"]["train_fingerprints"] == sorted(input_fingerprint(r["input"]) for r in tiny["rows"][:3])
+    assert saved["examples"]["train_texts"] == [r["similarity_text"] for r in tiny["rows"][:3]]
+    assert all(saved["examples"]["train_texts"])
     assert saved["global_steps"] == 2 == manifest["global_steps"]
     assert saved["prompt"]["system_prompt"] == tiny["system"]
 
@@ -264,3 +266,47 @@ def test_evaluate_refuses_a_changed_data_revision_unless_asked(tiny, tmp_path, m
     metrics = json.loads((run / "eval" / "val" / "metrics.json").read_text())
     assert metrics["data_revision"]["matches_training"] is False
     assert metrics["data_revision"]["changed_sources"][0]["path"] == str(source)
+
+
+def test_a_new_sibling_of_a_training_row_is_not_scored(tiny, tmp_path):
+    """A near-duplicate added after training, with an id that sorts first, takes over the group
+    key and can move the group into validation; the training row is excluded by id, and its new
+    sibling must be excluded too."""
+    import yaml
+
+    from check_model.__main__ import main
+
+    root = Path(__file__).resolve().parent.parent
+    source = tmp_path / "source.json"
+    source.write_text(SUBSET.read_text(encoding="utf-8"), encoding="utf-8")
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(source)], "catalog": str(root / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+    trained = json.loads((run / "run_manifest.json").read_text())["examples"]["train_ids"]
+    original = json.loads(source.read_text(encoding="utf-8"))
+
+    landed = False
+    for n, tid in enumerate(trained):
+        data = json.loads(json.dumps(original))
+        twin = next(json.loads(json.dumps(r)) for r in data["examples"] if r["id"] == tid)
+        twin["id"] = f"dice_train_000000_{n}"  # sorts before every real id
+        for lang in ("en", "zh"):
+            twin["scene"][lang] += " (later)"
+        data["examples"].append(twin)
+        source.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        main(["prepare", "--config", str(cfg)])
+        val_ids = [json.loads(line)["id"] for line in (tmp_path / "prepared" / "val.jsonl").read_text().splitlines()]
+        if twin["id"] in val_ids:
+            landed = True
+            break
+    assert landed, "no sibling moved into validation; the scenario under test did not arise"
+    main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])
+    metrics = json.loads((run / "eval" / "val" / "metrics.json").read_text())
+    scored = [json.loads(line)["id"] for line in (run / "eval" / "val" / "predictions.jsonl").read_text().splitlines()]
+    assert twin["id"] in metrics["excluded_related_rows"] and twin["id"] not in scored

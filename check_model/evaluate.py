@@ -33,6 +33,28 @@ def input_fingerprint(query: dict) -> str:
     return hashlib.sha256(json.dumps(query, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
+def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_fingerprints: frozenset[str],
+                        train_texts: list[str], threshold: float | None) -> set[str]:
+    """Ids of rows that are not training rows themselves but belong to the same scenario as one:
+    they share a current group with a training row (a link or similarity added after training
+    joins them), or their text is a near-duplicate of a training row's -- which also covers a
+    training row removed from the data since. Scoring them would leak the scenario."""
+    from .splits import similar_pairs
+
+    trained = {r["id"] for r in all_rows
+               if r["id"] in train_ids or input_fingerprint(r["input"]) in train_fingerprints}
+    groups = {r["group"] for r in all_rows if r["id"] in trained}
+    related = {r["id"] for r in all_rows if r["group"] in groups and r["id"] not in trained}
+    if threshold is not None and train_texts:
+        texts = {r["id"]: r.get("similarity_text") or "" for r in all_rows if r["id"] not in trained}
+        texts.update({f"\0train{i}": t for i, t in enumerate(train_texts)})
+        for a, b, _ in similar_pairs(texts, threshold):
+            a_train, b_train = a.startswith("\0train"), b.startswith("\0train")
+            if a_train != b_train:
+                related.add(b if a_train else a)
+    return related
+
+
 def _key(check: dict) -> tuple[str, str]:
     return check["kind"], check["name"]
 
@@ -70,15 +92,20 @@ def summarize(scored: list[dict]) -> dict:
 
 def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], out_dir: str | Path,
                   include_training_rows: bool = False, batch_size: int = 8,
-                  data_revision: dict | None = None, train_fingerprints: frozenset[str] = frozenset()) -> dict:
+                  data_revision: dict | None = None, train_fingerprints: frozenset[str] = frozenset(),
+                  related_to_training: frozenset[str] = frozenset()) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     def trained(row: dict) -> bool:
         return row["id"] in train_ids or input_fingerprint(row["input"]) in train_fingerprints
 
+    def excluded(row: dict) -> bool:
+        return trained(row) or row["id"] in related_to_training
+
     seen = [r for r in rows if trained(r)]
-    scored_rows = rows if include_training_rows else [r for r in rows if not trained(r)]
+    related = [r for r in rows if not trained(r) and r["id"] in related_to_training]
+    scored_rows = rows if include_training_rows else [r for r in rows if not excluded(r)]
     predictions = model.predict_many([r["input"] for r in scored_rows], batch_size=batch_size)
     records, scores = [], []
     for row, pred in zip(scored_rows, predictions):
@@ -108,6 +135,7 @@ def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], o
         "note": note,
         "scored": len(records),
         "excluded_trained_rows": [] if include_training_rows else sorted(r["id"] for r in seen),
+        "excluded_related_rows": [] if include_training_rows else sorted(r["id"] for r in related),
         "data_revision": data_revision,
         "fields": summarize(scores),
     }

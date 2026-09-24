@@ -71,7 +71,7 @@ class Row:
         return {
             "id": self.id, "source": self.source, "section": self.section, "scope": self.scope,
             "split": self.split, "group": self.group, "lang": self.lang, "input": self.input,
-            "reference": self.reference, "target": self.target,
+            "reference": self.reference, "target": self.target, "similarity_text": self.similarity_text,
         }
 
 

@@ -4,6 +4,7 @@ cannot silently fall back to a default."""
 from __future__ import annotations
 
 import copy
+import math
 from pathlib import Path
 
 import yaml
@@ -103,7 +104,28 @@ def _merge(base: dict, override: dict, path: str = "") -> dict:
     return out
 
 
+#: Values whose type is not enough: a negative or NaN val_fraction would put every group in
+#: training and leave no validation cohort, with nothing said. (key, low, high, high inclusive)
+RANGES = (("data.val_fraction", 0.0, 1.0, True),
+          ("data.near_duplicate_threshold", 0.0, 1.0, True),
+          ("train.warmup_ratio", 0.0, 1.0, False))
+
+
+def _check_ranges(config: dict) -> None:
+    for key, low, high, inclusive in RANGES:
+        section, name = key.split(".")
+        value = config[section][name]
+        if value is None:
+            continue
+        inside = math.isfinite(value) and low <= value and (value <= high if inclusive else value < high)
+        if not inside:
+            bound = "]" if inclusive else ")"
+            raise ValueError(f"config key {key!r} must be in [{low}, {high}{bound}, got {value!r}")
+
+
 def load_config(path: str | Path | None) -> dict:
     if path is None:
         return copy.deepcopy(DEFAULTS)
-    return _merge(DEFAULTS, yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {})
+    config = _merge(DEFAULTS, yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {})
+    _check_ranges(config)
+    return config
