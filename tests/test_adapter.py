@@ -153,3 +153,15 @@ def test_a_section_that_is_not_a_list_is_an_error(catalog, subset, write_source,
     subset["skipped_examples"] = value
     _, report = load(catalog, write_source(subset))
     assert any("section 'skipped_examples' must be a list" in m for _, m in messages(report))
+
+
+def test_a_missing_or_unreadable_source_is_a_reported_error(catalog, tmp_path):
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    listed = tmp_path / "list.json"
+    listed.write_text("[]", encoding="utf-8")
+    _, report = load_rows([str(tmp_path / "absent.json"), str(broken), str(listed)], catalog, "en")
+    found = [(e["source"].rsplit("/", 1)[-1], e["message"]) for e in report.errors]
+    assert found[0][0] == "absent.json" and "source file not found" in found[0][1]
+    assert found[1][0] == "broken.json" and "not valid JSON" in found[1][1]
+    assert found[2][0] == "list.json" and "must hold a JSON object" in found[2][1]

@@ -272,7 +272,21 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
     seen: dict[str, str] = {}
     for source in sources:
         path = Path(source)
-        data = json.loads(path.read_text(encoding="utf-8"))
+        if not path.is_file():
+            # The dice dataset reaches main with its own PR (iwa964/meridia-check-model#1), not
+            # with this code; say so instead of ending in a traceback.
+            report.errors.append({"source": source, "id": None, "message":
+                                  "source file not found; check data.sources (the dice dataset is added "
+                                  "to main by its own PR, iwa964/meridia-check-model#1)"})
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            report.errors.append({"source": source, "id": None, "message": f"not valid JSON: {exc}"})
+            continue
+        if not isinstance(data, dict):
+            report.errors.append({"source": source, "id": None, "message": "the file must hold a JSON object"})
+            continue
         version = data.get("schema_version")
         info = {
             "path": source, "sha256": _sha256(path), "schema_version": version,
