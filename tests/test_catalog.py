@@ -50,3 +50,47 @@ def test_sync_reproduces_snapshot_when_catalog_unchanged(catalog):
         pytest.skip("MeridiaGame's SkillBank moved on; run sync-catalog")
     assert fresh.skills == catalog.skills
     assert fresh.attributes == catalog.attributes
+
+
+# Two rows and the three constants exactly as MeridiaGame's SkillBank.gd and check_turn.py carry them.
+SKILL_ROWS = ('\t{"name": "Climbing", "category": "general", "subcategory": "athletics", "initial": "20"},\n'
+              '\t{"name": "Swimming", "category": "general", "subcategory": "athletics", "initial": "20"},\n')
+CONSTANTS = ('DIFFICULTIES = ("success", "hard", "extreme")\nKINDS = ("skill", "attribute")\n'
+             'ATTRIBUTES = ("STR", "CON", "SIZE", "DEX", "INT", "EDU", "WIL", "APP")\n')
+
+
+def fake_meridia(root: Path, constants: str = CONSTANTS) -> Path:
+    (root / "Scripts/profile/skill").mkdir(parents=True)
+    (root / "server").mkdir()
+    (root / "Scripts/profile/skill/SkillBank.gd").write_text(SKILL_ROWS, encoding="utf-8")
+    (root / "server/check_turn.py").write_text(constants, encoding="utf-8")
+    return root
+
+
+def git(root: Path, *args: str) -> None:
+    import subprocess
+
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@example.invalid", "-c", "user.name=t", *args],
+                   check=True, capture_output=True)
+
+
+def test_sync_refuses_uncommitted_catalog_sources(tmp_path):
+    root = fake_meridia(tmp_path / "MeridiaGame")
+    git(root, "init", "-q")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "catalog")
+    assert sync_from_meridia(root).source["commit"]  # clean: HEAD holds exactly these bytes
+    (root / "Scripts/profile/skill/SkillBank.gd").write_text(SKILL_ROWS.replace('"20"', '"25"'), encoding="utf-8")
+    with pytest.raises(ValueError, match="uncommitted changes to the catalog sources"):
+        sync_from_meridia(root)
+
+
+def test_sync_refuses_a_difficulty_the_prompt_cannot_describe(tmp_path):
+    from check_model.__main__ import main
+
+    root = fake_meridia(tmp_path / "MeridiaGame",
+                        CONSTANTS.replace('"extreme")', '"extreme", "critical")'))
+    out = tmp_path / "catalog.json"
+    with pytest.raises(SystemExit, match=r"no rule text for \['critical'\]"):
+        main(["sync-catalog", "--meridia", str(root), "--out", str(out)])
+    assert not out.exists()

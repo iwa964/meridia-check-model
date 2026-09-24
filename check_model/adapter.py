@@ -208,19 +208,23 @@ def _all_languages(record: dict) -> str:
     return " ".join(parts)
 
 
-def _links(value: Any) -> list[str]:
+def _links(value: Any, bad: list | None = None) -> list[str]:
     """Every `related_example_id` anywhere in a record: the dataset's own marker for two
-    entries that are variations of one scenario."""
+    entries that are variations of one scenario. A value that is not a non-empty string goes
+    to `bad` -- skipping it would split the scenario's variations without a word."""
     found: list[str] = []
     if isinstance(value, dict):
         for k, v in value.items():
-            if k == "related_example_id" and isinstance(v, str):
-                found.append(v)
+            if k == "related_example_id":
+                if isinstance(v, str) and v.strip():
+                    found.append(v)
+                elif bad is not None:
+                    bad.append(v)
             else:
-                found.extend(_links(v))
+                found.extend(_links(v, bad))
     elif isinstance(value, list):
         for v in value:
-            found.extend(_links(v))
+            found.extend(_links(v, bad))
     return found
 
 
@@ -272,6 +276,16 @@ def _meta(data: dict, key: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict:
+    """json.loads keeps only the last of repeated keys; two `examples` sections left by a merge
+    would lose every record of the first."""
+    keys = [k for k, _ in pairs]
+    repeated = sorted({k for k in keys if keys.count(k) > 1})
+    if repeated:
+        raise ValueError(f"duplicate key(s) {repeated} in one object")
+    return dict(pairs)
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -290,7 +304,7 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
                                   "to main by its own PR, iwa964/meridia-check-model#1)"})
             continue
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_no_duplicate_keys)
         except ValueError as exc:
             report.errors.append({"source": source, "id": None, "message": f"not valid JSON: {exc}"})
             continue
@@ -349,7 +363,11 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
                                           "message": f"duplicate id (also at {seen[rid]})"})
                     continue
                 seen[rid] = where
-                report.all_ids[rid] = _links(record)
+                bad_links: list = []
+                report.all_ids[rid] = _links(record, bad_links)
+                if bad_links:
+                    report.errors.append({"source": where, "id": rid, "message":
+                                          f"related_example_id must be a non-empty string id, got {bad_links!r}"})
                 scope = record.get("scenario_scope", data.get("scenario_scope"))
                 if scope not in SCOPES:
                     report.errors.append({"source": where, "id": rid,

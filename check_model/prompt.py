@@ -40,6 +40,26 @@ ATTRIBUTE_REQUEST_NOTE = (
 )
 
 
+#: What each difficulty label means in the game: the roll must come in under this share of the
+#: tested value (MeridiaGame `Check.threshold`, pinned by DialogueCheckTest: success = value,
+#: hard = 1/2, extreme = 1/5). The catalog carries the labels only, so a label added to
+#: check_turn.DIFFICULTIES needs its rule written here before the prompt can describe it.
+DIFFICULTY_RULES = {
+    "success": "a normal check, rolled under the full value",
+    "hard": "under half the value",
+    "extreme": "under a fifth of the value",
+}
+
+
+def _difficulty_sentence(difficulties: tuple[str, ...]) -> str:
+    unknown = [d for d in difficulties if d not in DIFFICULTY_RULES]
+    if unknown or not difficulties:
+        raise ValueError(f"catalog difficulties {list(difficulties)}: no rule text for {unknown}; "
+                         "add it to prompt.DIFFICULTY_RULES from the game's Check.threshold")
+    parts = [f'"{d}" ({DIFFICULTY_RULES[d]})' for d in difficulties]
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " or " + parts[-1]
+
+
 def system_prompt(catalog: Catalog) -> str:
     return (
         "You choose the dice check for one moment in the game Meridia. The game rolls the dice "
@@ -48,8 +68,7 @@ def system_prompt(catalog: Catalog) -> str:
         "(\"player_action\") or the event the game observed (\"observed_event\"), sometimes with "
         "runtime state.\n\n"
         "Decide whether a check is required. If one is, choose exactly one skill or attribute and "
-        "a difficulty: \"success\" (a normal check, rolled under the full value), \"hard\" (under "
-        "half the value) or \"extreme\" (under a fifth of the value).\n\n"
+        "a difficulty: " + _difficulty_sentence(catalog.difficulties) + ".\n\n"
         "Reply with one JSON object and nothing else, in one of these forms:\n"
         '{"roll_required": false, "checks": []}\n'
         '{"roll_required": true, "checks": [{"kind": "skill", "name": "<skill>", "difficulty": "<difficulty>"}]}\n'

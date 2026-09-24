@@ -108,10 +108,24 @@ def _merge(base: dict, override: dict, path: str = "") -> dict:
 #: training and leave no validation cohort, with nothing said. (key, low, high, high inclusive)
 RANGES = (("data.val_fraction", 0.0, 1.0, True),
           ("data.near_duplicate_threshold", 0.0, 1.0, True),
-          ("train.warmup_ratio", 0.0, 1.0, False))
+          ("train.warmup_ratio", 0.0, 1.0, False),
+          ("lora.dropout", 0.0, 1.0, False))
+
+
+#: Values that must be above zero. Zero is accepted by the libraries and trains nothing (a zero
+#: learning rate or epoch count, a LoRA rank or alpha of zero) or fails far from the config.
+POSITIVE = ("train.learning_rate", "train.num_train_epochs", "train.per_device_train_batch_size",
+            "train.gradient_accumulation_steps", "train.max_seq_length", "train.logging_steps",
+            "lora.r", "lora.alpha", "inference.max_new_tokens", "inference.batch_size",
+            "smoke.num_examples", "smoke.max_steps")
 
 
 def _check_ranges(config: dict) -> None:
+    for key in POSITIVE:
+        section, name = key.split(".")
+        value = config[section][name]
+        if not (math.isfinite(value) and value > 0):
+            raise ValueError(f"config key {key!r} must be above 0, got {value!r}")
     for key, low, high, inclusive in RANGES:
         section, name = key.split(".")
         value = config[section][name]

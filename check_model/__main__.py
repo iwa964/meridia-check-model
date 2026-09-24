@@ -43,8 +43,13 @@ def _run_dir(config: dict, prefix: str) -> Path:
 
 def cmd_sync_catalog(args) -> None:
     from .catalog import sync_from_meridia, write_catalog
+    from .prompt import system_prompt
 
-    catalog = sync_from_meridia(args.meridia)
+    try:
+        catalog = sync_from_meridia(args.meridia)
+        system_prompt(catalog)  # a difficulty the prompt cannot describe is refused before writing
+    except ValueError as exc:
+        sys.exit(f"refusing to sync the catalog: {exc}")
     write_catalog(catalog, args.out)
     print(f"wrote {args.out}: {len(catalog.rollable_skills)} rollable skills, "
           f"{len(catalog.special_skills)} special skills, attributes {list(catalog.attributes)}, "
@@ -221,22 +226,25 @@ def cmd_smoke(args) -> None:
         print(f"note: smoke mode is meant for 5-10 examples, got {len(picked)}")
     done("convert", f"{len(picked)} rows: {', '.join(ids)}")
 
+    run_dir = _run_dir(config, "smoke")
     if args.tiny:
         from .tiny import make_tiny_model
 
-        # One base per run: the run's manifest names this path, and a shared path would be
-        # overwritten by the next smoke run's fresh random weights.
-        tiny_dir = Path(config["data"]["prepared_dir"]).parent / f"tiny-random-model-{secrets.token_hex(3)}"
+        # Inside the run: its manifest names this path, a shared path would be overwritten by the
+        # next smoke run's fresh random weights, and a path beside the prepared data would go
+        # when that regenerable directory is cleaned. The run directory is created here,
+        # exclusively, so train() is told it already exists.
+        run_dir.mkdir(parents=True, exist_ok=False)
+        tiny_dir = run_dir / "tiny-random-model"
         system = prompt.system_prompt(load_catalog(config["data"]["catalog"]))
         make_tiny_model(tiny_dir, [r.to_json() for r in rows], system)
         config = copy.deepcopy(config)
         config["model"].update(base_model=str(tiny_dir), revision=None)
         done("tiny model", f"random-weight model at {tiny_dir} (plumbing only, not a real base model)")
 
-    run_dir = _run_dir(config, "smoke")
     manifest = train(config, picked, [], run_dir=run_dir, source_files=report.sources,
                      max_steps=smoke["max_steps"], mode="smoke",
-                     split_sha256=split_hashes(config["data"]["prepared_dir"]))
+                     split_sha256=split_hashes(config["data"]["prepared_dir"]), run_dir_created=args.tiny)
     losses = [e["loss"] for e in _train_log(run_dir) if "loss" in e]
     done("train", f"{manifest['global_steps']} steps, loss {losses[0] if losses else '?'} -> "
                   f"{losses[-1] if losses else '?'}")

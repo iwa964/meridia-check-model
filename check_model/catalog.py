@@ -127,6 +127,17 @@ def parse_skill_bank(text: str) -> list[dict]:
 
 def sync_from_meridia(meridia_dir: str | Path) -> Catalog:
     root = Path(meridia_dir)
+    try:
+        dirty = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--", SKILL_BANK_PATH, CHECK_TURN_PATH],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        dirty = ""  # not a git checkout: the snapshot records no commit, below
+    if dirty:
+        # The snapshot records HEAD as its commit; bytes HEAD does not hold would make that a lie.
+        raise ValueError(f"{root} has uncommitted changes to the catalog sources ({dirty.splitlines()}); "
+                         "commit or stash them, then sync")
     skill_bytes = (root / SKILL_BANK_PATH).read_bytes()
     check_bytes = (root / CHECK_TURN_PATH).read_bytes()
     check_source = check_bytes.decode("utf-8")

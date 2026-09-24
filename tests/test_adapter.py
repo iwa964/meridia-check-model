@@ -196,3 +196,23 @@ def test_a_non_string_input_mode_is_a_record_error(catalog, subset, write_source
     record(subset, "dice_train_000021")["input_mode"] = mode
     _, report = load(catalog, write_source(subset))
     assert ("dice_train_000021", f"input_mode must be a string, got {type(mode).__name__}") in messages(report)
+
+
+@pytest.mark.parametrize("link", [["dice_train_000028"], "", None, 28])
+def test_a_malformed_related_example_id_is_a_record_error(catalog, subset, write_source, link):
+    from helpers import record
+
+    record(subset, "dice_train_000029")["related_example_id"] = link
+    _, report = load(catalog, write_source(subset))
+    assert any(i == "dice_train_000029" and "related_example_id must be a non-empty string id" in m
+               for i, m in messages(report))
+
+
+def test_duplicate_keys_in_a_source_are_an_error(catalog, tmp_path):
+    text = SUBSET.read_text(encoding="utf-8")
+    # A merge that left two `examples` sections: json.loads alone keeps the second, silently.
+    doubled = text.replace('"examples": [', '"examples": [], "examples": [', 1)
+    path = tmp_path / "doubled.json"
+    path.write_text(doubled, encoding="utf-8")
+    _, report = load(catalog, path)
+    assert any("duplicate key(s) ['examples']" in m for _, m in messages(report))

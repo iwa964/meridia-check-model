@@ -165,7 +165,7 @@ def load_tokenizer(name_or_path: str, revision: str | None, trust_remote_code: b
 
 def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir: str | Path,
           source_files: list[dict], max_steps: int | None = None, mode: str = "train",
-          split_sha256: dict | None = None) -> dict:
+          split_sha256: dict | None = None, run_dir_created: bool = False) -> dict:
     """Trains, saves and returns the manifest. `train_rows` must all have a target;
     `source_files` is the prepare report's `sources` (paths and sha256 of the data)."""
     import peft
@@ -175,7 +175,9 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
 
     model_cfg, lora_cfg, train_cfg = config["model"], config["lora"], config["train"]
     run_dir = Path(run_dir)
-    run_dir.mkdir(parents=True, exist_ok=False)  # two runs never write into one directory
+    # Two runs never write into one directory: created here exclusively, or already created
+    # exclusively by the caller for this run (smoke --tiny puts its base model inside it).
+    run_dir.mkdir(parents=True, exist_ok=run_dir_created)
     transformers.set_seed(config["seed"])
 
     catalog = load_catalog(config["data"]["catalog"])

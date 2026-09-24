@@ -195,6 +195,17 @@ def test_each_tiny_smoke_run_keeps_its_own_base(tmp_path, monkeypatch):
     with pytest.raises(SystemExit, match="val split: trained on no recorded hash, now [0-9a-f]{12}"):
         main(["evaluate", "--run", str(run), "--split", "val"])
 
+    # Each base lives inside its own run, so the run still loads once the regenerable
+    # prepared data around it is cleaned away.
+    runs = sorted((tmp_path / "runs").iterdir())
+    assert [Path(b).parent for b in bases] == runs
+    import shutil
+
+    shutil.rmtree(tmp_path / "build")
+    query = tmp_path / "query.json"
+    query.write_text(json.dumps({"scene": "A cliff.", "player_action": "I climb it."}), encoding="utf-8")
+    main(["predict", "--run", str(runs[1]), "--input", str(query)])
+
 
 def test_evaluate_uses_the_runs_own_data_and_refuses_another(tiny, tmp_path, monkeypatch):
     import yaml

@@ -47,7 +47,7 @@ summary. Every source record lands in exactly one bucket:
 | eval_only | several accepted answers, none selected (`alternative_examples`) — scored against all of them, never trained on | 1 (000038) |
 | unsupported | labelled, in a form this version does not handle; the reason is listed | 6 |
 | pending / skipped | no usable label | 1 / 2 |
-| **errors** | a missing required field, a label outside the catalog, a duplicate id or input, records under a section name the adapter does not know (a misspelled one would otherwise be dropped) | 0 |
+| **errors** | a missing required field, a label outside the catalog, a duplicate id or input, a malformed `related_example_id`, a key repeated within one JSON object, records under a section name the adapter does not know (a misspelled one would otherwise be dropped) | 0 |
 
 **Errors stop the pipeline**, leave the last clean split files untouched, and name the record (`ERROR dice_train_000001 (…:examples[0]): unknown
 skill 'maintenance'`). A label is valid when the game would accept it: a skill must be a
@@ -74,6 +74,9 @@ run trained on.
 3. If the dataset was labelled against a newer `SkillBank` (a catalog WARNING), refresh the
    snapshot and commit it:
    `python -m check_model sync-catalog --meridia ../MeridiaGame`
+   It refuses a checkout with uncommitted changes to the two catalog sources (the snapshot
+   records `HEAD` as its commit), and a difficulty label the prompt has no rule text for
+   (`prompt.DIFFICULTY_RULES`, from the game's `Check.threshold`).
 4. Train a new run. Runs already trained keep the prompt and catalog they were trained with;
    evaluating one of them on the changed data needs `--allow-data-change` (see *Evaluate*).
 
@@ -92,7 +95,8 @@ Stages: load + validate → convert → a few training steps → save → reload
 It prints `[ok]` per stage. **Smoke mode verifies the pipeline, not the model**: its scores are
 on the rows it just trained on and are labelled `held_out: false`. `--tiny` builds a 2-layer
 random model with a tokenizer trained on this dataset, so the pipeline can run with no
-download. Its answers are noise.
+download. Its answers are noise. The random model is saved inside the smoke run
+(`tiny-random-model/`), so the run still loads after `build/` is cleaned.
 
 ## 3. Train
 

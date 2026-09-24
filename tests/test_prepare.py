@@ -187,3 +187,13 @@ def test_a_corrupt_previous_split_file_does_not_block_rebuilding_it(tmp_path):
     _, report = build(config)
     assert "dice_train_000001 moved from val to train since the last prepare" in report.warnings
     assert any("1 line(s) of the previous prepare are unreadable" in w for w in report.warnings)
+
+
+@pytest.mark.parametrize("section, key, value", [
+    ("train", "learning_rate", 0.0), ("train", "learning_rate", -1.0e-4), ("train", "num_train_epochs", 0),
+    ("lora", "r", 0), ("lora", "alpha", 0), ("lora", "dropout", 1.0), ("inference", "max_new_tokens", 0)])
+def test_values_that_would_train_or_generate_nothing_are_refused(tmp_path, section, key, value):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({section: {key: value}}), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"'{section}.{key}' must be"):
+        load_config(path)
