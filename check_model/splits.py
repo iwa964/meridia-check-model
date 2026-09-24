@@ -36,7 +36,9 @@ def _text(row_input: dict) -> str:
     return " ".join(str(v) for k, v in row_input.items() if isinstance(v, str))
 
 
-def similar_pairs(texts: dict[str, str], threshold: float) -> list[tuple[str, str, float]]:
+def similar_pairs(texts: dict, threshold: float) -> list[tuple]:
+    """Pairs of keys whose texts score at least `threshold`. Keys need only be hashable and
+    mutually sortable (row ids, or typed tuples)."""
     ids = sorted(texts)
     tokens = {i: _TOKEN.findall(texts[i].lower()) for i in ids}
     df = Counter(t for i in ids for t in set(tokens[i]))

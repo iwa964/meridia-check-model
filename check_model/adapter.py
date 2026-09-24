@@ -179,6 +179,10 @@ def _single_checks(annotation: dict, catalog: Catalog) -> list[dict]:
         # A damaged label, not an unsupported form: skipping it would drop it without a word.
         raise _Invalid(f"check_mode {mode!r} needs exactly {expected} check(s), got {len(checks)}")
     if len(checks) == 2:
+        # Unsupported is for a well-formed form this pipeline cannot train, not a damaged one:
+        # each entry passes the same checks a single label does before the pair is set aside.
+        for entry in checks:
+            _check_entry(entry, catalog)
         raise _Skip("unsupported", "pair check (check_mode: pair)")
     if len(checks) != 1:
         raise _Invalid(f"roll_required is true with {len(checks)} checks (single needs exactly 1)")

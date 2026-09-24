@@ -65,12 +65,13 @@ def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_finge
                 and (r["id"] in historical
                      or (set(r.get("links") or []) | set(r.get("group_members") or [])) & historical)}
     if threshold is not None and train_texts:
-        texts = {r["id"]: r.get("similarity_text") or "" for r in all_rows if r["id"] not in trained}
-        texts.update({f"\0train{i}": t for i, t in enumerate(train_texts)})
+        # Keys in two disjoint namespaces: a row id is any non-blank string, so no string prefix
+        # can mark the training texts without some id colliding with it.
+        texts = {("row", r["id"]): r.get("similarity_text") or "" for r in all_rows if r["id"] not in trained}
+        texts.update({("train", i): t for i, t in enumerate(train_texts)})
         for a, b, _ in similar_pairs(texts, threshold):
-            a_train, b_train = a.startswith("\0train"), b.startswith("\0train")
-            if a_train != b_train:
-                related.add(b if a_train else a)
+            if a[0] != b[0]:  # one row, one training text
+                related.add((b if a[0] == "train" else a)[1])
     # A current group is one scenario in today's data, so a row grouped now with any related row
     # is related too, however that row was found: `candidate -> bridge -> removed training row`
     # reaches `bridge` through its link and `candidate` only through bridge's group.

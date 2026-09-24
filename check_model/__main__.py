@@ -226,6 +226,21 @@ class _LazyModel:
         return self._model.predict_many(queries, batch_size=batch_size)
 
 
+def _pinned_inside(out: Path, run: Path, manifest: dict) -> Path | None:
+    """The pinned directory `out` lies in, or None: the run's model/ (model_files) or, for a
+    LoRA run, a local base directory (local_sha256). A file written into either changes its
+    digest, and every later load refuses the run -- every run sharing that base, for a base."""
+    from .infer import base_source
+
+    pinned = [run / "model"]
+    if manifest["adapter"] == "lora":
+        base = Path(base_source(manifest["base_model"], run))
+        if base.is_dir():
+            pinned.append(base)
+    resolved = out.resolve()
+    return next((p for p in pinned if resolved.is_relative_to(p.resolve())), None)
+
+
 def cmd_evaluate(args) -> None:
     from .evaluate import evaluate_rows, training_relatives
     from .infer import check_format, load_run_catalog
@@ -237,6 +252,11 @@ def cmd_evaluate(args) -> None:
     # manifest is read once: the config, the exclusions and the model all come from that read.
     manifest = _manifest(args.run)
     config = _run_config(args, manifest)
+    pinned = _pinned_inside(Path(args.out) if args.out else Path(args.run) / "eval" / args.split,
+                            Path(args.run), manifest)
+    if pinned:
+        sys.exit(f"refusing to evaluate: --out {args.out} is inside {pinned}, whose files the run is "
+                 "checked against at every load; writing there would make the run refuse to load")
     mismatch = _data_mismatch(config, manifest)
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
@@ -282,7 +302,7 @@ def cmd_evaluate(args) -> None:
                                  train_links=manifest["examples"].get("train_links", {}),
                                  train_scenario_ids=set(manifest["examples"].get("train_scenario_ids", [])),
                                  threshold=manifest["config"]["data"]["near_duplicate_threshold"])
-    out = args.out or Path(args.run) / "eval" / args.split
+    out = Path(args.out) if args.out else Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,
                             train_fingerprints=fingerprints, related_to_training=frozenset(related),
                             include_training_rows=args.split == "train",

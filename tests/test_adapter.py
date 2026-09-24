@@ -331,3 +331,15 @@ def test_a_source_with_no_records_is_an_error(catalog, subset, write_source, sec
     rows, report = load(catalog, SUBSET, write_source(subset, "empty.json"))
     assert [m for i, m in messages(report) if i is None] == [
         f"no records: every record section ({', '.join(SECTION_KIND)}) is missing or empty"]
+
+
+@pytest.mark.parametrize("damage, message", [
+    (lambda entry: entry.pop("roll_system"), "check 'Drawing' has no roll_system"),
+    (lambda entry: entry.update(difficulty="impossible"), "difficulty must be one of"),
+    (lambda entry: entry.update(name="Not A Catalog Skill"), "unknown skill 'Not A Catalog Skill'"),
+])
+def test_a_pair_with_a_damaged_entry_is_an_error_not_unsupported(catalog, subset, write_source, damage, message):
+    damage(record(subset, "dice_train_000044")["annotation"]["checks"][1])
+    rows, report = load(catalog, write_source(subset))
+    assert [m for i, m in messages(report) if i == "dice_train_000044" and m.startswith(message)]
+    assert "dice_train_000044" not in {e["id"] for e in report.unsupported}

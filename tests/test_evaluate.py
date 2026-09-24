@@ -238,3 +238,13 @@ def test_a_training_input_is_recognised_by_prepare_s_duplicate_key(tmp_path):
     related = training_relatives(same_text, train_ids={"old"}, train_fingerprints=frozenset(),
                                  train_texts=["a cliff i climb it", "some unrelated training text"], threshold=1.0)
     assert related == {"renamed"}
+
+
+def test_a_row_id_that_looks_like_a_training_key_is_still_compared():
+    from check_model.evaluate import training_relatives
+
+    rows_now = [{"id": "\0train0", "group": "\0train0", "group_members": ["\0train0"], "links": [],
+                 "input": {"scene": "s", "player_action": "a"}, "similarity_text": "the old gate creaks open"}]
+    related = training_relatives(rows_now, train_ids={"removed"}, train_fingerprints=frozenset(),
+                                 train_texts=["the old gate creaks open", "a storm over the harbour"], threshold=0.9)
+    assert related == {"\0train0"}

@@ -803,3 +803,30 @@ def test_a_run_directory_inside_the_local_base_is_refused(tiny, tmp_path):
     with pytest.raises(ValueError, match="is inside the local base model"):
         train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
     assert not (base / "runs").exists()
+
+
+def test_evaluate_never_writes_into_the_directories_a_run_pins(tiny, tmp_path):
+    import shutil
+
+    import yaml
+
+    from check_model.__main__ import main
+
+    base = tmp_path / "base"
+    shutil.copytree(tiny["dir"], base)
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(SUBSET)], "catalog": str(Path(__file__).resolve().parent.parent / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(base)},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+    before = {p: p.read_bytes() for d in (run / "model", base) for p in d.rglob("*") if p.is_file()}
+    for inside in (run / "model" / "eval", base / "eval"):
+        with pytest.raises(SystemExit, match="refusing to evaluate: --out .* is inside"):
+            main(["evaluate", "--run", str(run), "--split", "val", "--out", str(inside)])
+    after = {p: p.read_bytes() for d in (run / "model", base) for p in d.rglob("*") if p.is_file()}
+    assert after == before
+    main(["evaluate", "--run", str(run), "--split", "val", "--out", str(tmp_path / "elsewhere")])
