@@ -126,7 +126,7 @@ def test_documented_null_and_list_values_are_accepted(tmp_path):
 def test_values_out_of_range_are_refused(tmp_path, section, key, value):
     path = tmp_path / "bad.yaml"
     path.write_text(yaml.safe_dump({section: {key: value}}), encoding="utf-8")
-    with pytest.raises(ValueError, match=f"config key '{section}.{key}' must be in"):
+    with pytest.raises(ValueError, match=f"config key '{section}.{key}' must be (in|finite)"):
         load_config(path)
 
 
@@ -195,5 +195,15 @@ def test_a_corrupt_previous_split_file_does_not_block_rebuilding_it(tmp_path):
 def test_values_that_would_train_or_generate_nothing_are_refused(tmp_path, section, key, value):
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump({section: {key: value}}), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"'{section}.{key}' must be"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("section, key, value", [
+    ("train", "weight_decay", ".inf"), ("train", "weight_decay", "-0.1"), ("train", "learning_rate", ".nan"),
+    ("data", "val_fraction", ".nan")])
+def test_non_finite_and_negative_float_settings_are_refused(tmp_path, section, key, value):
+    path = tmp_path / "config.yaml"
+    path.write_text(f"{section}:\n  {key}: {value}\n", encoding="utf-8")
     with pytest.raises(ValueError, match=f"'{section}.{key}' must be"):
         load_config(path)

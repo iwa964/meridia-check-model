@@ -87,6 +87,9 @@ def _check_type(path: str, default, value) -> None:
     if not ok:
         expected = "string" if default is None else type(default).__name__
         raise ValueError(f"config key {path!r} must be a {expected}, got {value!r}")
+    if isinstance(value, float) and not math.isfinite(value):
+        # YAML reads .inf and .nan as floats; no setting here means anything with one.
+        raise ValueError(f"config key {path!r} must be finite, got {value!r}")
 
 
 def _merge(base: dict, override: dict, path: str = "") -> dict:
@@ -109,7 +112,8 @@ def _merge(base: dict, override: dict, path: str = "") -> dict:
 RANGES = (("data.val_fraction", 0.0, 1.0, True),
           ("data.near_duplicate_threshold", 0.0, 1.0, True),
           ("train.warmup_ratio", 0.0, 1.0, False),
-          ("lora.dropout", 0.0, 1.0, False))
+          ("lora.dropout", 0.0, 1.0, False),
+          ("train.weight_decay", 0.0, math.inf, True))
 
 
 #: Values that must be above zero. Zero is accepted by the libraries and trains nothing (a zero

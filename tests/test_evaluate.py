@@ -183,3 +183,16 @@ def test_an_evaluation_emptied_by_related_rows_says_so(tmp_path):
     assert metrics["scored"] == 0
     assert metrics["note"] == ("nothing was scored: every val row was used in training (1) "
                                "or belongs to a training row's scenario (2)")
+
+
+def test_a_row_grouped_with_a_newly_related_row_is_related_too():
+    from check_model.evaluate import training_relatives
+
+    # bridge -> the removed training row; candidate -> bridge, so both share bridge's group now.
+    bridge = dict(_row("bridge", "bridge", "A bridge scene."), links=["removed"])
+    candidate = dict(_row("candidate", "bridge", "A candidate scene."), links=["bridge"])
+    unrelated = dict(_row("other", "other", "An unrelated scene."), links=[])
+    related = training_relatives([bridge, candidate, unrelated], train_ids={"removed"},
+                                 train_fingerprints=frozenset(), train_texts=[], threshold=None,
+                                 train_links={"removed": []})
+    assert related == {"bridge", "candidate"}

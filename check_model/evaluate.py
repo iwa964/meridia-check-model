@@ -41,9 +41,10 @@ def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_finge
     they were grouped with a training row when it was trained (transitively, through records
     that never reached a split file too), they share a current group with a training row (a
     link or similarity added after training joins them), they are explicitly linked to or from
-    a training row, or their text is a near-duplicate of a training row's. Everything but the
-    current group is recorded at training, so it survives the training row's removal. Scoring
-    them would leak the scenario."""
+    a training row, or their text is a near-duplicate of a training row's; and so is every row
+    in the current group of a row related in any of these ways. Everything but the current
+    group is recorded at training, so it survives the training row's removal. Scoring them
+    would leak the scenario."""
     from .splits import similar_pairs
 
     trained = {r["id"] for r in all_rows
@@ -61,6 +62,11 @@ def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_finge
             a_train, b_train = a.startswith("\0train"), b.startswith("\0train")
             if a_train != b_train:
                 related.add(b if a_train else a)
+    # A current group is one scenario in today's data, so a row grouped now with any related row
+    # is related too, however that row was found: `candidate -> bridge -> removed training row`
+    # reaches `bridge` through its link and `candidate` only through bridge's group.
+    related_groups = {r["group"] for r in all_rows if r["id"] in related}
+    related |= {r["id"] for r in all_rows if r["group"] in related_groups and r["id"] not in trained}
     return related
 
 

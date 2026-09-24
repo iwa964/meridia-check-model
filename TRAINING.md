@@ -199,8 +199,9 @@ Rows the run trained on stay excluded in both cases, matched by id and by input,
 after training is still recognised. So are rows of the same scenario as a training row: every id grouped with it when it was
 trained (transitively, including unsupported or pending records that linked the scenario
 together), its current group, an explicit `related_example_id` link to or from it, or a
-near-duplicate of its text. All but the current group are kept in the manifest, so this holds
-even after the training row is removed. `metrics.json` lists them as `excluded_related_rows`.
+near-duplicate of its text; and every row now grouped with a row related in any of these ways.
+All but the current group are kept in the manifest, so this holds even after the training row is
+removed. `metrics.json` lists them as `excluded_related_rows`.
 
 Results are written to `runs/<run>/eval/<split>/`:
 
