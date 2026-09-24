@@ -607,6 +607,8 @@ def test_duplicate_inputs_are_found_within_and_across_splits():
 
 @pytest.mark.parametrize("damage, problem", [
     (lambda m: m.clear(), "precision is missing"),
+    (lambda m: m.update(precision="garbage"), "precision has the wrong type or value"),
+    (lambda m: m.update(precision="auto"), "precision has the wrong type or value"),
     (lambda m: m["base_model"].update(trust_remote_code="yes"), "base_model.trust_remote_code has the wrong type"),
     (lambda m: m["examples"].update(train_links={"a": "b"}), "examples.train_links has the wrong type"),
     (lambda m: m["config"]["data"].pop("split_seed"), r"config: the recorded config lacks \['data.split_seed'\]"),
@@ -636,3 +638,27 @@ def read_manifest_ok(run, manifest) -> bool:
 
     (run / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     return read_manifest(run) == manifest
+
+
+@pytest.mark.parametrize("text, where", [("train:\n  1: 2\n", "in train"), ("true: 1\n", "in the top level")])
+def test_a_config_key_that_is_not_a_string_is_named(tmp_path, text, where):
+    path = tmp_path / "config.yaml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ValueError, match=f"config keys must be strings, got .* {where}"):
+        load_config(path)
+
+
+def test_prepare_refuses_a_source_holding_an_unpaired_surrogate(tmp_path, subset):
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps(subset), encoding="utf-8")
+    cfg = config_file(tmp_path, source)
+    main(["prepare", "--config", cfg])
+    before = {p.name: p.read_bytes() for p in (tmp_path / "prepared").glob("*.jsonl")}
+    record(subset, "dice_train_000001")["scene"]["en"] = "\ud800"  # json.dumps writes the escape
+    source.write_text(json.dumps(subset), encoding="utf-8")
+    assert "\\ud800" in source.read_text(encoding="utf-8")
+    with pytest.raises(SystemExit):
+        main(["prepare", "--config", cfg])
+    report = json.loads((tmp_path / "prepared" / "report.json").read_text(encoding="utf-8"))
+    assert any("unpaired surrogate" in e["message"] for e in report["errors"])
+    assert {p.name: p.read_bytes() for p in (tmp_path / "prepared").glob("*.jsonl")} == before

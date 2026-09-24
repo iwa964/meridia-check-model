@@ -173,3 +173,27 @@ def test_json_nesting_is_bounded_whatever_the_decoder_allows():
     # Room for the deepest legitimate document: a source record (3 levels) carrying a
     # runtime_state at the query bound.
     assert strictjson.MAX_DEPTH >= 3 + prompt.MAX_JSON_DEPTH
+
+
+def test_an_integer_too_long_to_render_is_a_bad_query():
+    query = {"scene": "s", "player_action": "a", "runtime_state": {"n": 10 ** 5000}}
+    assert prompt.query_errors(query) == ["runtime_state.n is an integer too long to render"]
+    assert prompt.query_errors({"scene": "s", "player_action": "a", "runtime_state": {"n": 10 ** 40}}) == []
+
+
+def test_unpaired_surrogates_are_refused():
+    from check_model import strictjson
+
+    for text in ('{"scene": "\\ud800"}', '{"\\udfff": 1}', '["ok", ["\\ud800"]]'):
+        with pytest.raises(ValueError, match="unpaired surrogate"):
+            strictjson.loads(text)
+    assert strictjson.loads('{"scene": "\\ud83d\\ude00"}') == {"scene": "\U0001F600"}  # a pair is fine
+    lone = "\ud800"
+    assert prompt.query_errors({"scene": lone, "player_action": "a"}) == [
+        "scene holds an unpaired surrogate, which is not text"]
+    assert prompt.query_errors({"scene": "s", "observed_event": lone}) == [
+        "observed_event holds an unpaired surrogate, which is not text"]
+    assert prompt.query_errors({"scene": "s", "player_action": "a", "runtime_state": {"x": [lone]}}) == [
+        "runtime_state.x[0] holds an unpaired surrogate, which is not text"]
+    assert prompt.query_errors({"scene": "s", "player_action": "a", "runtime_state": {lone: 1}}) == [
+        "runtime_state has a key with an unpaired surrogate, which is not text"]

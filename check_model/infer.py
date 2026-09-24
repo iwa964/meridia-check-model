@@ -31,9 +31,12 @@ def _is_opt_str(v) -> bool:
     return v is None or isinstance(v, str)
 
 
+#: What train records as `precision`: resolve_precision's results, never "auto".
+RESOLVED_PRECISIONS = ("bf16", "fp16", "fp32")
+
 #: Every manifest field serving and evaluation read, and what it must hold.
 _MANIFEST_FIELDS = {
-    "precision": lambda v: isinstance(v, str),
+    "precision": lambda v: v in RESOLVED_PRECISIONS,
     "adapter": lambda v: v in ("lora", None),
     "catalog_sha256": lambda v: isinstance(v, str),
     "model_files": _is_str_map,
@@ -190,12 +193,16 @@ def serving_dtype(precision: str, device: str):
 
 
 class CheckModel:
-    def __init__(self, run_dir: str | Path, *, max_new_tokens: int = 64, device: str | None = None):
+    def __init__(self, run_dir: str | Path, *, max_new_tokens: int = 64, device: str | None = None,
+                 manifest: dict | None = None):
+        """`manifest`: one already returned by read_manifest for this run, which evaluate and
+        predict pass so that the model is checked against the manifest their exclusions and
+        settings came from; every file loaded below is verified against it."""
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
         self.run_dir = Path(run_dir)
-        self.manifest = read_manifest(self.run_dir)
+        self.manifest = manifest if manifest is not None else read_manifest(self.run_dir)
         check_format(self.manifest)
         self.system = self.manifest["prompt"]["system_prompt"]
         self.catalog = load_run_catalog(self.run_dir, self.manifest)

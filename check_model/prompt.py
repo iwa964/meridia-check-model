@@ -109,6 +109,16 @@ def target_text(decision: dict) -> str:
     return json.dumps({"roll_required": decision["roll_required"], "checks": checks}, ensure_ascii=False)
 
 
+def _is_unicode(text: str) -> bool:
+    """False for a string holding an unpaired surrogate ("\\ud800" decodes to one): it cannot be
+    encoded as UTF-8, so the tokenizer or any file write would fail on it."""
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 #: Deepest nesting of objects and lists accepted in runtime_state. Well inside what json.dumps
 #: can write before the interpreter's recursion limit (about 1000), so a query that passes
 #: validation always renders into a prompt.
@@ -119,7 +129,15 @@ def _json_problem(value: Any, where: str, _open: set | None = None) -> str | Non
     """Why `value` is not plain, finite JSON data, or None. A Python caller can pass a set, a
     NaN or a container that holds itself, which json.dumps would reject, crash on, or write as
     the non-JSON token NaN into the prompt. `_open` holds the containers on the current path."""
-    if value is None or isinstance(value, (bool, str, int)):
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        return None if _is_unicode(value) else f"{where} holds an unpaired surrogate, which is not text"
+    if isinstance(value, int):
+        try:
+            str(value)  # past sys.get_int_max_str_digits() json.dumps cannot write it into a prompt
+        except ValueError:
+            return f"{where} is an integer too long to render"
         return None
     if isinstance(value, float):
         return None if math.isfinite(value) else f"{where} is {value!r}, not a finite number"
@@ -141,6 +159,8 @@ def _json_problem(value: Any, where: str, _open: set | None = None) -> str | Non
         for key, item in value.items():
             if not isinstance(key, str):
                 return f"{where} has a non-string key {key!r}"
+            if not _is_unicode(key):
+                return f"{where} has a key with an unpaired surrogate, which is not text"
             problem = _json_problem(item, f"{where}.{key}", _open)
             if problem:
                 return problem
@@ -156,11 +176,15 @@ def query_errors(query: Any) -> list[str]:
     errors = []
     if not isinstance(query.get("scene"), str) or not query["scene"].strip():
         errors.append("scene must be a non-empty string")
+    elif not _is_unicode(query["scene"]):
+        errors.append("scene holds an unpaired surrogate, which is not text")
     actions = [k for k in ("player_action", "observed_event") if k in query]
     if len(actions) != 1:
         errors.append("exactly one of player_action / observed_event is required")
     elif not isinstance(query[actions[0]], str) or not query[actions[0]].strip():
         errors.append(f"{actions[0]} must be a non-empty string")
+    elif not _is_unicode(query[actions[0]]):
+        errors.append(f"{actions[0]} holds an unpaired surrogate, which is not text")
     if "runtime_state" in query:
         if not isinstance(query["runtime_state"], dict):
             errors.append("runtime_state must be an object")

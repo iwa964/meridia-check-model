@@ -94,11 +94,11 @@ def _manifest(run: str) -> dict:
         sys.exit(f"--run {run}: {exc}")
 
 
-def _run_config(args) -> dict:
+def _run_config(args, manifest: dict) -> dict:
     """The run's own recorded config, unless --config names another one."""
     if args.config is not None:
         return load_config(args.config)
-    return _manifest(args.run)["config"]
+    return manifest["config"]
 
 
 def _read_provenance(prepared: Path) -> tuple[dict | None, str | None]:
@@ -174,7 +174,10 @@ def _changed_sources(config: dict, manifest: dict) -> list[dict]:
 def cmd_predict(args) -> None:
     from .infer import check_format
 
-    config = _run_config(args)
+    # Read once and handed to the model: a second read could meet another run moved into place.
+    # With --config the run is not needed until a query is known to be well formed.
+    manifest = _manifest(args.run) if args.config is None else None
+    config = _run_config(args, manifest)
     raw = Path(args.input).read_bytes() if args.input != "-" else sys.stdin.buffer.read()
     from . import strictjson
 
@@ -187,9 +190,11 @@ def cmd_predict(args) -> None:
         sys.exit(f"--input {args.input}: expected one query object or a list of them, "
                  f"got {type(queries).__name__}")
     single = isinstance(queries, dict)
-    check_format(_manifest(args.run))
+    if manifest is None:
+        manifest = _manifest(args.run)
+    check_format(manifest)
     # Built on the first runnable query: an empty list or a batch of bad queries loads nothing.
-    model = _LazyModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
+    model = _LazyModel(args.run, manifest=manifest, max_new_tokens=config["inference"]["max_new_tokens"])
     results = model.predict_many([queries] if single else queries, batch_size=config["inference"]["batch_size"])
     print(json.dumps(results[0] if single else results, ensure_ascii=False, indent=2))
 
@@ -222,11 +227,12 @@ def cmd_evaluate(args) -> None:
     from .infer import check_format, load_run_catalog
     from .prepare import duplicate_ids, duplicate_inputs, read_split
 
-    config = _run_config(args)
     # Every refusal below needs only the manifest and file hashes: checking them before the model
     # loads spares a base-model download or a GPU allocation for a run that would be refused, and
-    # checking them before any split is parsed turns a damaged split file into a refusal.
+    # checking them before any split is parsed turns a damaged split file into a refusal. The
+    # manifest is read once: the config, the exclusions and the model all come from that read.
     manifest = _manifest(args.run)
+    config = _run_config(args, manifest)
     mismatch = _data_mismatch(config, manifest)
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
@@ -263,7 +269,7 @@ def cmd_evaluate(args) -> None:
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
     check_format(manifest)  # refused even when nothing turns out to need the model
-    model = _LazyModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
+    model = _LazyModel(args.run, manifest=manifest, max_new_tokens=config["inference"]["max_new_tokens"])
     train_ids = set(manifest["examples"]["train_ids"])
     fingerprints = frozenset(manifest["examples"].get("train_fingerprints", []))
     all_rows = [r for s in ("train", "val", "test") for r in splits[s]]

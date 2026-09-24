@@ -732,3 +732,59 @@ def test_evaluate_refuses_changed_splits_holding_one_input_twice(tiny, tmp_path)
         f.write(json.dumps(copied, ensure_ascii=False) + "\n")
     with pytest.raises(SystemExit, match=rf"rows with the same input under different ids: \[\['{row['id']}', 'copied_row'\]\]"):
         main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])
+
+
+def _train_small_run(tiny, tmp_path):
+    import yaml
+
+    from check_model.__main__ import main
+
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(SUBSET)], "catalog": str(Path(__file__).resolve().parent.parent / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+    return run
+
+
+def _replace_manifest(run: Path) -> None:
+    """Another valid run's manifest moved into place: here, one pinning other model files."""
+    manifest = json.loads((run / "run_manifest.json").read_text(encoding="utf-8"))
+    manifest["model_files"] = {name: "0" * 64 for name in manifest["model_files"]}
+    (run / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_evaluate_and_predict_load_the_model_against_the_manifest_they_read(tiny, tmp_path, monkeypatch, capsys):
+    import check_model.evaluate as evaluate
+    import check_model.infer as infer
+    from check_model.__main__ import main
+
+    run = _train_small_run(tiny, tmp_path)
+    original = (run / "run_manifest.json").read_bytes()
+    real_evaluate_rows = evaluate.evaluate_rows
+
+    def replace_then_score(*args, **kwargs):  # the model is built lazily, inside scoring
+        _replace_manifest(run)
+        return real_evaluate_rows(*args, **kwargs)
+
+    monkeypatch.setattr(evaluate, "evaluate_rows", replace_then_score)
+    main(["evaluate", "--run", str(run), "--split", "val"])
+    assert json.loads((run / "eval" / "val" / "metrics.json").read_text())["scored"] > 0
+
+    (run / "run_manifest.json").write_bytes(original)
+    real_check_format = infer.check_format
+
+    def check_then_replace(manifest):
+        real_check_format(manifest)
+        _replace_manifest(run)
+
+    monkeypatch.setattr(infer, "check_format", check_then_replace)
+    query = tmp_path / "query.json"
+    query.write_text('{"scene": "A cliff.", "player_action": "I climb."}', encoding="utf-8")
+    capsys.readouterr()
+    main(["predict", "--run", str(run), "--input", str(query)])
+    assert "raw_output" in json.loads(capsys.readouterr().out)

@@ -42,26 +42,42 @@ def _finite_float(token: str) -> float:
 MAX_DEPTH = 200
 
 
-def _too_deep(value: Any) -> bool:
+def _is_unicode(text: str) -> bool:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:  # an unpaired surrogate: "\ud800" is valid JSON, and not text
+        return False
+    return True
+
+
+def _problem(value: Any) -> str | None:
+    """Why a decoded value is not usable data, or None: nesting past MAX_DEPTH, or a string
+    or key holding an unpaired surrogate, which every UTF-8 write downstream would fail on."""
     stack = [(value, 1)]
     while stack:  # iterative: the check must not itself recurse
         item, depth = stack.pop()
-        if isinstance(item, (dict, list)):
+        if isinstance(item, str):
+            if not _is_unicode(item):
+                return f"the string {item!r:.40} holds an unpaired surrogate, which is not text"
+        elif isinstance(item, (dict, list)):
             if depth > MAX_DEPTH:
-                return True
+                return f"nested more than {MAX_DEPTH} levels deep"
+            if isinstance(item, dict):
+                stack.extend((key, depth) for key in item)
             stack.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
-    return False
+    return None
 
 
 def loads(text: str) -> Any:
     """json.loads, raising ValueError on a repeated key, a NaN / Infinity constant, a number
-    too large for a finite float, or nesting deeper than MAX_DEPTH."""
+    too large for a finite float, nesting deeper than MAX_DEPTH, or an unpaired surrogate."""
     try:
         value = json.loads(text, object_pairs_hook=_unique, parse_constant=_no_constant,
                            parse_float=_finite_float)
     except RecursionError:
         # Past the interpreter's recursion limit the decoder itself gives up (Python 3.11).
         raise ValueError(f"nested more than {MAX_DEPTH} levels deep") from None
-    if _too_deep(value):
-        raise ValueError(f"nested more than {MAX_DEPTH} levels deep")
+    problem = _problem(value)
+    if problem:
+        raise ValueError(problem)
     return value

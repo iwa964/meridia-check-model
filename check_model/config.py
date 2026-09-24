@@ -122,6 +122,8 @@ def _check_type(path: str, default, value) -> None:
 def _merge(base: dict, override: dict, path: str = "") -> dict:
     out = copy.deepcopy(base)
     for key, value in (override or {}).items():
+        if not isinstance(key, str):  # YAML reads `1:` or `true:` as a number or a boolean
+            raise ValueError(f"config keys must be strings, got {key!r} in {path.rstrip('.') or 'the top level'}")
         if key not in base:
             raise ValueError(f"unknown config key {path + key!r}")
         if isinstance(base[key], dict):
