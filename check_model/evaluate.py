@@ -62,7 +62,8 @@ def summarize(scored: list[dict]) -> dict:
 
 
 def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], out_dir: str | Path,
-                  include_training_rows: bool = False, batch_size: int = 8) -> dict:
+                  include_training_rows: bool = False, batch_size: int = 8,
+                  data_revision: dict | None = None) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     seen = [r for r in rows if r["id"] in train_ids]
@@ -96,6 +97,7 @@ def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], o
         "note": note,
         "scored": len(records),
         "excluded_trained_rows": [] if include_training_rows else sorted(r["id"] for r in seen),
+        "data_revision": data_revision,
         "fields": summarize(scores),
     }
     with (out_dir / "predictions.jsonl").open("w", encoding="utf-8") as f:

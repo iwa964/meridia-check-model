@@ -73,6 +73,9 @@ def test_train_save_reload_predict(tiny, tmp_path):
     assert set(result) == {"valid", "decision", "game_request", "note", "errors", "raw_output"}
     assert isinstance(result["raw_output"], str)
     assert result["valid"] == (result["decision"] is not None)
+    for bad in (0, -1):
+        with pytest.raises(ValueError, match="batch_size must be a positive integer"):
+            model.predict_many([tiny["rows"][0]["input"]], batch_size=bad)
 
 
 def test_query_past_the_context_window_is_refused(tiny, tmp_path):
@@ -228,3 +231,33 @@ def test_serving_honours_trust_remote_code_for_the_tokenizer(tiny, tmp_path, mon
     monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", spy)
     CheckModel(run, max_new_tokens=4)
     assert seen == [True]
+
+
+def test_evaluate_refuses_a_changed_data_revision_unless_asked(tiny, tmp_path, monkeypatch):
+    import yaml
+
+    from check_model.__main__ import main
+
+    root = Path(__file__).resolve().parent.parent
+    source = tmp_path / "source.json"
+    source.write_text(SUBSET.read_text(encoding="utf-8"), encoding="utf-8")
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(source)], "catalog": str(root / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+
+    data = json.loads(source.read_text(encoding="utf-8"))  # edited in place: same path, new content
+    data["examples"][0]["scene"]["en"] += " The wall has been freshly whitewashed."
+    source.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    main(["prepare", "--config", str(cfg)])
+    with pytest.raises(SystemExit, match="not the revision the run was trained on"):
+        main(["evaluate", "--run", str(run), "--split", "val"])
+    main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])
+    metrics = json.loads((run / "eval" / "val" / "metrics.json").read_text())
+    assert metrics["data_revision"]["matches_training"] is False
+    assert metrics["data_revision"]["changed_sources"][0]["path"] == str(source)

@@ -74,7 +74,8 @@ run trained on.
 3. If the dataset was labelled against a newer `SkillBank` (a catalog WARNING), refresh the
    snapshot and commit it:
    `python -m check_model sync-catalog --meridia ../MeridiaGame`
-4. Train a new run. Runs already trained keep the prompt and catalog they were trained with.
+4. Train a new run. Runs already trained keep the prompt and catalog they were trained with;
+   evaluating one of them on the changed data needs `--allow-data-change` (see *Evaluate*).
 
 Meridia-specific test scenes go in a **separate source file** with
 `"scenario_scope": "game_specific"` (same schema), listed under `data.sources`. Its rows
@@ -181,7 +182,10 @@ python -m check_model evaluate --run runs/<run> --split val    # or test / train
 
 `evaluate` and `predict` use the config the run was trained with. Pass `--config` to override it;
 `evaluate` then refuses prepared data whose sources or prompt language differ from the run's,
-since scoring another experiment's data would still print plausible metrics.
+since scoring another experiment's data would still print plausible metrics. It also compares each
+source's SHA-256 with the one recorded at training: data edited since then is refused unless you
+pass `--allow-data-change`, and `metrics.json` records the revision either way (`data_revision`).
+Rows the run trained on stay excluded in both cases.
 
 Results are written to `runs/<run>/eval/<split>/`:
 

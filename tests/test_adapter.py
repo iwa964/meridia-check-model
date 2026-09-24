@@ -146,3 +146,10 @@ def test_malformed_alternatives_are_named_not_crashed(catalog, subset, write_sou
     record(subset, "dice_train_000038")["annotation"]["alternatives"] = alternatives
     _, report = load(catalog, write_source(subset))
     assert any(i == "dice_train_000038" and expected in m for i, m in messages(report)), messages(report)
+
+
+@pytest.mark.parametrize("value", [None, {}, False, "examples"])
+def test_a_section_that_is_not_a_list_is_an_error(catalog, subset, write_source, value):
+    subset["skipped_examples"] = value
+    _, report = load(catalog, write_source(subset))
+    assert any("section 'skipped_examples' must be a list" in m for _, m in messages(report))

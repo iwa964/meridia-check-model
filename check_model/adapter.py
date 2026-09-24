@@ -297,7 +297,13 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
                     report.errors.append({"source": source, "id": None, "message":
                                           f"unknown section {section!r}: the adapter does not know how to treat it"})
         for section, kind in SECTION_KIND.items():
-            for index, record in enumerate(data.get(section) or []):
+            records = data.get(section, [])
+            if not isinstance(records, list):
+                # A section edited to null or {} is not "no records": that would drop them silently.
+                report.errors.append({"source": source, "id": None, "message":
+                                      f"section {section!r} must be a list, got {type(records).__name__}"})
+                continue
+            for index, record in enumerate(records):
                 where = f"{source}:{section}[{index}]"
                 rid = record.get("id") if isinstance(record, dict) else None
                 if not isinstance(rid, str) or not rid.strip():

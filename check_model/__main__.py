@@ -97,6 +97,17 @@ def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None
     return None
 
 
+def _changed_sources(config: dict, manifest: dict) -> list[dict]:
+    """Sources whose content differs from what the run was trained on (SHA-256, not path: a file
+    edited in place keeps its path). Empty when the prepared data is the training revision."""
+    from .prepare import PROVENANCE
+
+    provenance = json.loads((Path(config["data"]["prepared_dir"]) / PROVENANCE).read_text(encoding="utf-8"))
+    trained = {s["path"]: s.get("sha256") for s in manifest["examples"].get("source_files", [])}
+    return [{"path": s["path"], "trained_sha256": trained.get(s["path"]), "prepared_sha256": s["sha256"]}
+            for s in provenance["sources"] if trained.get(s["path"]) != s["sha256"]]
+
+
 def cmd_predict(args) -> None:
     _require_training_stack()
     from .infer import CheckModel
@@ -122,10 +133,18 @@ def cmd_evaluate(args) -> None:
     mismatch = _data_mismatch(config, model.manifest, rows)
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
+    changed = _changed_sources(config, model.manifest)
+    if changed and not args.allow_data_change:
+        listed = "; ".join(f"{c['path']}: trained on {(c['trained_sha256'] or 'no recorded hash')[:12]}, "
+                           f"prepared from {c['prepared_sha256'][:12]}" for c in changed)
+        sys.exit(f"refusing to evaluate: the prepared data is not the revision the run was trained on ({listed}). "
+                 "Pass --allow-data-change to score it anyway; trained rows stay excluded and the metrics "
+                 "record the change.")
     train_ids = set(model.manifest["examples"]["train_ids"])
     out = args.out or Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,
                             include_training_rows=args.split == "train",
+                            data_revision={"matches_training": not changed, "changed_sources": changed},
                             batch_size=config["inference"]["batch_size"])
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
     print(f"per-example predictions: {Path(out) / 'predictions.jsonl'}")
@@ -225,6 +244,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--config", default=None,
                    help="default: the config the run was trained with; another must prepare the same data")
     p.add_argument("--out", default=None)
+    p.add_argument("--allow-data-change", action="store_true",
+                   help="score prepared data whose sources changed since training (recorded in the metrics)")
     p.set_defaults(func=cmd_evaluate)
 
     p = sub.add_parser("smoke", help="load -> convert -> a few steps -> save -> reload -> inference")

@@ -116,6 +116,8 @@ class CheckModel:
         return [self.tokenizer.decode(seq[width:], skip_special_tokens=True) for seq in out]
 
     def predict_many(self, queries: list[dict], batch_size: int = 8) -> list[dict]:
+        if not isinstance(batch_size, int) or batch_size < 1:
+            raise ValueError(f"batch_size must be a positive integer, got {batch_size!r}")
         results: list[dict | None] = [None] * len(queries)
         runnable = []
         for i, q in enumerate(queries):
