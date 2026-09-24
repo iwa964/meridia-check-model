@@ -13,11 +13,20 @@ model is asked or how its answers are checked.
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 
-from . import prompt
+from . import prompt, strictjson
 from .catalog import Catalog, parse_catalog
+
+
+def read_manifest(run_dir: str | Path) -> dict:
+    """run_manifest.json, decoded strictly: with two `base_model` or `examples` objects (a merge,
+    say) the last would otherwise silently decide which base and which training ids the run has."""
+    path = Path(run_dir) / "run_manifest.json"
+    data = strictjson.loads(path.read_bytes().decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a run manifest (not a JSON object)")
+    return data
 
 
 def base_revision(base: dict) -> str | None:
@@ -121,7 +130,7 @@ class CheckModel:
         from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
         self.run_dir = Path(run_dir)
-        self.manifest = json.loads((self.run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+        self.manifest = read_manifest(self.run_dir)
         check_format(self.manifest)
         self.system = self.manifest["prompt"]["system_prompt"]
         self.catalog = load_run_catalog(self.run_dir, self.manifest)

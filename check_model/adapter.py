@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import strictjson
+from . import prompt, strictjson
 from .catalog import Catalog
 
 SUPPORTED_SCHEMA_VERSIONS = ("1.0",)
@@ -209,6 +209,11 @@ def _input(record: dict, lang: str) -> dict:
         if not isinstance(state, dict):
             raise _Invalid("runtime_state must be an object")
         out["runtime_state"] = state
+    # What read_split and predict apply to this input later: a row prepare accepts must also be
+    # one evaluation can read back (a runtime_state nested past the depth bound, say).
+    problems = prompt.query_errors(out)
+    if problems:
+        raise _Invalid("; ".join(problems))
     return out
 
 

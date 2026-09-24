@@ -168,7 +168,10 @@ def query_errors(query: Any) -> list[str]:
             problem = _json_problem(query["runtime_state"], "runtime_state")
             if problem:
                 errors.append(problem)
-    unknown = set(query) - {"scene", "player_action", "observed_event", "runtime_state"}
+    not_str = [k for k in query if not isinstance(k, str)]
+    if not_str:  # a Python caller's; sorted() below would fail comparing them with strings
+        errors.append(f"query keys must be strings, got {not_str!r}")
+    unknown = {k for k in query if isinstance(k, str)} - {"scene", "player_action", "observed_event", "runtime_state"}
     if unknown:
         errors.append(f"unknown fields {sorted(unknown)}")
     return errors

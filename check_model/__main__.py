@@ -85,12 +85,20 @@ def cmd_train(args) -> None:
     print(f"saved {run_dir}")
 
 
+def _manifest(run: str) -> dict:
+    from .infer import read_manifest
+
+    try:
+        return read_manifest(run)
+    except (OSError, ValueError) as exc:  # a missing, truncated or ambiguous manifest
+        sys.exit(f"--run {run}: {exc}")
+
+
 def _run_config(args) -> dict:
     """The run's own recorded config, unless --config names another one."""
     if args.config is not None:
         return load_config(args.config)
-    manifest = json.loads((Path(args.run) / "run_manifest.json").read_text(encoding="utf-8"))
-    return manifest["config"]
+    return _manifest(args.run)["config"]
 
 
 def _read_provenance(prepared: Path) -> tuple[dict | None, str | None]:
@@ -179,7 +187,7 @@ def cmd_predict(args) -> None:
         sys.exit(f"--input {args.input}: expected one query object or a list of them, "
                  f"got {type(queries).__name__}")
     single = isinstance(queries, dict)
-    check_format(json.loads((Path(args.run) / "run_manifest.json").read_text(encoding="utf-8")))
+    check_format(_manifest(args.run))
     # Built on the first runnable query: an empty list or a batch of bad queries loads nothing.
     model = _LazyModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
     results = model.predict_many([queries] if single else queries, batch_size=config["inference"]["batch_size"])
@@ -218,7 +226,7 @@ def cmd_evaluate(args) -> None:
     # Every refusal below needs only the manifest and file hashes: checking them before the model
     # loads spares a base-model download or a GPU allocation for a run that would be refused, and
     # checking them before any split is parsed turns a damaged split file into a refusal.
-    manifest = json.loads((Path(args.run) / "run_manifest.json").read_text(encoding="utf-8"))
+    manifest = _manifest(args.run)
     mismatch = _data_mismatch(config, manifest)
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")

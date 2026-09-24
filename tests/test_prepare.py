@@ -393,6 +393,9 @@ def test_a_split_line_is_decoded_strictly(tmp_path, line, problem):
     ({"group_members": None}, "missing ['group_members']"),
     ({"similarity_text": None}, "missing ['similarity_text']"),
     ({"group_members": [""]}, "group_members must hold ids"),
+    ({"group": "", "group_members": []}, "group is blank"),
+    ({"group_members": []}, "group_members must include the row's id and its group"),
+    ({"group": "r0", "group_members": ["r1"]}, "group_members must include the row's id and its group"),
     ({"split": "train"}, "split 'train' in the val file")])
 def test_a_prepared_row_without_its_relation_metadata_is_named(tmp_path, change, problem):
     from check_model.prepare import read_split
@@ -521,8 +524,17 @@ def test_prepare_refuses_a_catalog_the_prompt_cannot_describe(tmp_path, change, 
     assert not (tmp_path / "prepared" / "train.jsonl").exists()
 
 
+def _repeat_first_skill_as_special(text: str) -> str:
+    catalog = json.loads(text)
+    catalog["skills"].append(dict(catalog["skills"][0], initial=""))
+    return json.dumps(catalog)
+
+
 @pytest.mark.parametrize("edit, problem", [
     (lambda text: text.replace('"skills": [', '"skills": [], "skills": [', 1), r"duplicate key\(s\) \['skills'\]"),
+    (_repeat_first_skill_as_special, r"not a catalog: skills lists \['Investigation'\] more than once"),
+    (lambda text: text.replace('"attributes": [', '"attributes": ["STR", ', 1),
+     r"not a catalog: attributes lists \['STR'\] more than once"),
     (lambda text: text.replace('"attributes"', '"attribute"', 1), "not a catalog: expected an object with exactly the keys"),
     (lambda text: text.replace('"initial"', '"initial_value"', 1), "not a catalog: skills must be"),
     (lambda text: text.replace('"blob_sha"', '"sha"', 1), "not a catalog: source must record"),
@@ -540,3 +552,33 @@ def test_prepare_refuses_an_ambiguous_or_malformed_catalog(tmp_path, edit, probl
     with pytest.raises(SystemExit, match=f"data.catalog {re.escape(str(path))}: .*{problem}"):
         main(["prepare", "--config", config_file(tmp_path, SUBSET, catalog=str(path))])
     assert not (tmp_path / "prepared" / "train.jsonl").exists()
+
+
+@pytest.mark.parametrize("value", [0, -2])
+def test_max_steps_is_minus_one_or_positive(tmp_path, value):
+    path = tmp_path / "config.yaml"
+    path.write_text(f"train:\n  max_steps: {value}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"'train.max_steps' must be -1 \(train num_train_epochs\) or above 0"):
+        load_config(path)
+    for fine in (-1, 5):
+        path.write_text(f"train:\n  max_steps: {fine}\n", encoding="utf-8")
+        assert load_config(path)["train"]["max_steps"] == fine
+
+
+def test_a_run_manifest_with_a_repeated_key_is_refused(tmp_path):
+    from check_model.infer import read_manifest
+
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "run_manifest.json").write_text('{"base_model": {"name_or_path": "a"}, "base_model": {"name_or_path": "b"}}',
+                                           encoding="utf-8")
+    with pytest.raises(ValueError, match=r"duplicate key\(s\) \['base_model'\]"):
+        read_manifest(run)
+    with pytest.raises(SystemExit, match=r"--run .*duplicate key\(s\) \['base_model'\]"):
+        main(["evaluate", "--run", str(run), "--split", "val"])
+    query = tmp_path / "query.json"
+    query.write_text('{"scene": "A cliff.", "player_action": "I climb."}', encoding="utf-8")
+    config = tmp_path / "empty.yaml"
+    config.write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"--run .*duplicate key\(s\) \['base_model'\]"):
+        main(["predict", "--run", str(run), "--config", str(config), "--input", str(query)])

@@ -173,6 +173,13 @@ def _row_problem(row: dict, split: str, catalog=None) -> str | None:
     for key in ("links", "group_members"):
         if not all(_is_id(i) for i in row[key]):
             return f"{key} must hold ids"
+    # assign_splits names a group by one of its ids and lists every member, the row included.
+    # Evaluation links rows to trained scenarios through these; empty, a renamed variation of a
+    # trained row would be scored as held out.
+    if not _is_id(row["group"]):
+        return "group is blank"
+    if row["id"] not in row["group_members"] or row["group"] not in row["group_members"]:
+        return "group_members must include the row's id and its group"
     if not row["similarity_text"].strip():
         # The adapter always writes the scene and action here; blank, the near-duplicate check
         # against training texts would see nothing and let a renamed variant through.

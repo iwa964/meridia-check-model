@@ -21,6 +21,7 @@ import hashlib
 import json
 import re
 import subprocess
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -114,6 +115,13 @@ def _catalog_problem(data) -> str | None:
             and all(isinstance(r, dict) and isinstance(r.get("name"), str) and r["name"].strip()
                     and isinstance(r.get("initial"), str) for r in data["skills"])):
         return "skills must be a non-empty list of rows, each with a name and an initial (strings)"
+    # A name listed twice is ambiguous: a skill with a blank and a set initial would be offered
+    # as rollable by the prompt and refused as special by the label check.
+    for key, names in (("kinds", data["kinds"]), ("difficulties", data["difficulties"]),
+                       ("attributes", data["attributes"]), ("skills", [r["name"] for r in data["skills"]])):
+        repeated = sorted(n for n, count in Counter(names).items() if count > 1)
+        if repeated:
+            return f"{key} lists {repeated} more than once"
     source = data["source"]
     if not (isinstance(source, dict)
             and all(isinstance(source.get(k), dict) and isinstance(source[k].get("blob_sha"), str)

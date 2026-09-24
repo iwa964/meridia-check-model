@@ -295,3 +295,15 @@ def test_alternatives_that_repeat_one_choice_are_an_error(catalog, subset, write
     alternatives[1] = copy.deepcopy(alternatives[0])
     _, report = load(catalog, write_source(subset))
     assert ("dice_train_000038", "alternatives repeat the same choice; one_of needs distinct options") in messages(report)
+
+
+def test_a_source_input_that_predict_would_refuse_is_an_error(catalog, subset, write_source):
+    from check_model import prompt
+
+    state = {}
+    for _ in range(prompt.MAX_JSON_DEPTH):
+        state = {"x": state}  # one level past the bound, counting runtime_state itself
+    record(subset, "dice_train_000021")["runtime_state"] = state
+    rows, report = load(catalog, write_source(subset))
+    assert ("dice_train_000021", f"runtime_state.{'x.' * 99}x is nested more than 100 levels deep") in messages(report)
+    assert "dice_train_000021" not in {r.id for r in rows}

@@ -151,3 +151,8 @@ def test_json_nested_past_the_recursion_limit_is_a_value_error():
 
     with pytest.raises(ValueError, match="nested too deeply"):
         strictjson.loads('{"a":' * 5000 + "1" + "}" * 5000)
+
+
+def test_a_query_with_non_string_keys_is_a_bad_query_not_a_crash():
+    errors = prompt.query_errors({"scene": "s", "player_action": "a", 1: "x", "extra": "y"})
+    assert errors == ["query keys must be strings, got [1]", "unknown fields ['extra']"]

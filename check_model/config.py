@@ -166,6 +166,12 @@ def _check_ranges(config: dict) -> None:
         value = _setting(config, key)
         if not (math.isfinite(value) and value > 0):
             raise ValueError(f"config key {key!r} must be above 0, got {value!r}")
+    steps = config["train"]["max_steps"]
+    if steps != -1 and steps <= 0:
+        # TrainingArguments reads only a positive value as an override: 0 or -2 would quietly
+        # run the whole num_train_epochs schedule instead.
+        raise ValueError(f"config key 'train.max_steps' must be -1 (train num_train_epochs) or above 0, "
+                         f"got {steps!r}")
     for key, low, high, inclusive in RANGES:
         value = _setting(config, key)
         if value is None:
