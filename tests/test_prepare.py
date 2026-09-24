@@ -207,3 +207,14 @@ def test_non_finite_and_negative_float_settings_are_refused(tmp_path, section, k
     path.write_text(f"{section}:\n  {key}: {value}\n", encoding="utf-8")
     with pytest.raises(ValueError, match=f"'{section}.{key}' must be"):
         load_config(path)
+
+
+@pytest.mark.parametrize("section, key, value", [
+    ("data", "sources", [None]), ("data", "sources", [""]), ("data", "extra_groups", [None]),
+    ("data", "extra_groups", [["dice_train_000001", 2]]), ("smoke", "example_ids", [3]),
+    ("lora", "target_modules", [None])])
+def test_list_settings_with_malformed_elements_are_refused(tmp_path, section, key, value):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({section: {key: value}}), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"'{section}.{key}' must be a list of"):
+        load_config(path)

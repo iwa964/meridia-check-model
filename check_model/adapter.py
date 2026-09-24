@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import strictjson
 from .catalog import Catalog
 
 SUPPORTED_SCHEMA_VERSIONS = ("1.0",)
@@ -276,16 +277,6 @@ def _meta(data: dict, key: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict:
-    """json.loads keeps only the last of repeated keys; two `examples` sections left by a merge
-    would lose every record of the first."""
-    keys = [k for k, _ in pairs]
-    repeated = sorted({k for k in keys if keys.count(k) > 1})
-    if repeated:
-        raise ValueError(f"duplicate key(s) {repeated} in one object")
-    return dict(pairs)
-
-
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -304,7 +295,7 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
                                   "to main by its own PR, iwa964/meridia-check-model#1)"})
             continue
         try:
-            data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_no_duplicate_keys)
+            data = strictjson.loads(path.read_text(encoding="utf-8"))
         except ValueError as exc:
             report.errors.append({"source": source, "id": None, "message": f"not valid JSON: {exc}"})
             continue

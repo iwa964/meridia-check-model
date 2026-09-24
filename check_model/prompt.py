@@ -27,6 +27,7 @@ import hashlib
 import json
 from typing import Any
 
+from . import strictjson
 from .catalog import Catalog
 
 #: Bump when the prompt or target format changes: a model trained on one format is not
@@ -123,7 +124,7 @@ def parse_decision(text: str, catalog: Catalog) -> tuple[dict | None, list[str]]
     """(decision, []) for a well-formed reply, else (None, reasons). Strict: the whole reply
     must be the one object, with no extra keys and only catalog labels."""
     try:
-        raw = json.loads(text.strip())
+        raw = strictjson.loads(text.strip())  # a repeated key is ambiguous, not "the last one wins"
     except ValueError as exc:
         return None, [f"not JSON: {exc}"]
     if not isinstance(raw, dict):

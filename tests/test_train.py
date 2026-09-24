@@ -231,6 +231,12 @@ def test_evaluate_uses_the_runs_own_data_and_refuses_another(tiny, tmp_path, mon
     assert (run / "eval" / "val" / "metrics.json").exists()
 
     main(["prepare", "--config", config("zh", language="zh")])
+    import check_model.infer as infer
+
+    def no_model(*args, **kwargs):  # a refusal must come before any base-model download
+        raise AssertionError("the model was loaded before the data checks")
+
+    monkeypatch.setattr(infer, "CheckModel", no_model)
     with pytest.raises(SystemExit, match="split with \\{'language': 'zh'"):
         main(["evaluate", "--run", str(run), "--split", "val", "--config", config("zh", language="zh")])
 

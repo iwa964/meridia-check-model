@@ -193,7 +193,7 @@ files are hashed as they are on disk at evaluation time, not read back from `spl
 and their hashes catch what the sources cannot: an adapter or splitter change that turns the same
 bytes into different rows, or a split file edited or replaced after `prepare`. Data changed since training is refused unless you pass `--allow-data-change`,
 and `metrics.json` records the revision either way (`data_revision`: `changed_sources`,
-`changed_splits`). A run trained before split hashes were recorded is refused the same way.
+`changed_splits`). Every one of these refusals is checked before the model loads. A run trained before split hashes were recorded is refused the same way.
 Evaluating a smoke run is fine too; it records split hashes like any run does.
 Rows the run trained on stay excluded in both cases, matched by id and by input, so a record renamed
 after training is still recognised. So are rows of the same scenario as a training row: every id grouped with it when it was

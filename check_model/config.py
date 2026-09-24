@@ -65,6 +65,20 @@ DEFAULTS: dict = {
 #: Keys whose value may also be null, and the one string key that may also be a list.
 NULLABLE = {"data.near_duplicate_threshold", "model.revision"}
 STR_OR_LIST = {"lora.target_modules"}
+#: What each list-valued key holds: [null] would pass the list check and crash far from the
+#: config (Path(None), iterating None). "ids" is a list of non-empty strings.
+LIST_ITEMS = {"data.sources": "str", "smoke.example_ids": "str", "lora.target_modules": "str",
+              "data.extra_groups": "ids"}
+
+
+def _is_id(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _bad_items(path: str, value: list) -> list:
+    if LIST_ITEMS[path] == "str":
+        return [v for v in value if not _is_id(v)]
+    return [v for v in value if not (isinstance(v, list) and all(_is_id(i) for i in v))]
 
 
 def _check_type(path: str, default, value) -> None:
@@ -87,6 +101,11 @@ def _check_type(path: str, default, value) -> None:
     if not ok:
         expected = "string" if default is None else type(default).__name__
         raise ValueError(f"config key {path!r} must be a {expected}, got {value!r}")
+    if isinstance(value, list):
+        bad = _bad_items(path, value)
+        if bad:
+            holds = "non-empty strings" if LIST_ITEMS[path] == "str" else "lists of non-empty id strings"
+            raise ValueError(f"config key {path!r} must be a list of {holds}, got {bad!r} in it")
     if isinstance(value, float) and not math.isfinite(value):
         # YAML reads .inf and .nan as floats; no setting here means anything with one.
         raise ValueError(f"config key {path!r} must be finite, got {value!r}")

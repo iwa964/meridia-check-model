@@ -163,12 +163,14 @@ def cmd_evaluate(args) -> None:
 
     config = _run_config(args)
     rows = read_split(config["data"]["prepared_dir"], args.split)
-    model = CheckModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
-    mismatch = _data_mismatch(config, model.manifest, rows)
+    # Every refusal below needs only the manifest: checking them before the model loads spares a
+    # base-model download or a GPU allocation for a run that would be refused anyway.
+    manifest = json.loads((Path(args.run) / "run_manifest.json").read_text(encoding="utf-8"))
+    mismatch = _data_mismatch(config, manifest, rows)
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
-    changed = _changed_sources(config, model.manifest)
-    changed_splits = _changed_splits(config, model.manifest)
+    changed = _changed_sources(config, manifest)
+    changed_splits = _changed_splits(config, manifest)
     if (changed or changed_splits) and not args.allow_data_change:
         listed = "; ".join(
             [f"{c['path']}: trained on {_short(c['trained_sha256'])}, "
@@ -178,14 +180,15 @@ def cmd_evaluate(args) -> None:
         sys.exit(f"refusing to evaluate: the prepared data is not the revision the run was trained on ({listed}). "
                  "Pass --allow-data-change to score it anyway; trained rows stay excluded and the metrics "
                  "record the change.")
-    train_ids = set(model.manifest["examples"]["train_ids"])
-    fingerprints = frozenset(model.manifest["examples"].get("train_fingerprints", []))
+    model = CheckModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
+    train_ids = set(manifest["examples"]["train_ids"])
+    fingerprints = frozenset(manifest["examples"].get("train_fingerprints", []))
     all_rows = [r for s in ("train", "val", "test") for r in read_split(config["data"]["prepared_dir"], s)]
     related = training_relatives(all_rows, train_ids=train_ids, train_fingerprints=fingerprints,
-                                 train_texts=model.manifest["examples"].get("train_texts", []),
-                                 train_links=model.manifest["examples"].get("train_links", {}),
-                                 train_scenario_ids=set(model.manifest["examples"].get("train_scenario_ids", [])),
-                                 threshold=model.manifest["config"]["data"]["near_duplicate_threshold"])
+                                 train_texts=manifest["examples"].get("train_texts", []),
+                                 train_links=manifest["examples"].get("train_links", {}),
+                                 train_scenario_ids=set(manifest["examples"].get("train_scenario_ids", [])),
+                                 threshold=manifest["config"]["data"]["near_duplicate_threshold"])
     out = args.out or Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,
                             train_fingerprints=fingerprints, related_to_training=frozenset(related),

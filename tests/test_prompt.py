@@ -65,3 +65,12 @@ def test_query_errors(query, expected):
 def test_user_message_keeps_unicode():
     assert "攀爬" in prompt.user_message({"scene": "攀爬", "player_action": "a"})
     assert json.loads(prompt.user_message({"scene": "攀爬", "player_action": "a"}))["scene"] == "攀爬"
+
+
+@pytest.mark.parametrize("reply", [
+    '{"roll_required": false, "roll_required": true, "checks": []}',
+    '{"roll_required": true, "checks": [{"kind": "skill", "name": "Climbing", "name": "Swimming", '
+    '"difficulty": "hard"}]}'])
+def test_a_reply_with_a_repeated_key_is_not_a_decision(catalog, reply):
+    decision, errors = prompt.parse_decision(reply, catalog)
+    assert decision is None and "duplicate key(s)" in errors[0]
