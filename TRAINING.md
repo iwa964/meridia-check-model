@@ -38,7 +38,7 @@ python -m check_model prepare --config configs/sft_example.yaml
 ```
 
 This writes `build/data/{train,val,test}.jsonl`, `build/data/splits_provenance.json` (the sources and
-split settings those files were built from, which `evaluate` checks) and `build/data/report.json`, and prints a
+split settings those files were built from, and each split file's SHA-256, which `evaluate` checks) and `build/data/report.json`, and prints a
 summary. Every source record lands in exactly one bucket:
 
 | Bucket | Meaning | 2026-09-23, dataset at db81744 (50 records; rerun `prepare` for current figures) |
@@ -105,7 +105,7 @@ Each run gets its own directory `runs/<run_name>-<timestamp>-<random>/`, never s
 - `model/` — the LoRA adapter, tokenizer and chat template
 - `catalog.json` — the label catalog the run was trained on
 - `train_log.jsonl` — the Trainer's log history (loss, learning rate, final `eval_loss` on validation)
-- `run_manifest.json` — the base model (name, pinned revision, resolved hub commit), the full config, the system prompt and its hash, the source files' SHA-256, every train and val example id, token-length stats, library versions and the repo commit
+- `run_manifest.json` — the base model (name, pinned revision, resolved hub commit), the full config, the system prompt and its hash, the source files' SHA-256 and the prepared split files' SHA-256, every train and val example id, token-length stats, library versions and the repo commit
 
 How the training is set up:
 
@@ -184,12 +184,16 @@ python -m check_model evaluate --run runs/<run> --split val    # or test / train
 `evaluate` then refuses prepared data whose sources, prompt language or split settings (`val_fraction`,
 `split_seed`, `near_duplicate_threshold`, `extra_groups`) differ from the run's,
 since scoring another experiment's data would still print plausible metrics. It also compares each
-source's SHA-256 with the one recorded at training: data edited since then is refused unless you
-pass `--allow-data-change`, and `metrics.json` records the revision either way (`data_revision`).
+source's SHA-256, and each prepared split file's, with the ones recorded at training: the split
+hashes catch what the sources cannot — an adapter or splitter change that turns the same bytes
+into different rows. Data changed since training is refused unless you pass `--allow-data-change`,
+and `metrics.json` records the revision either way (`data_revision`: `changed_sources`,
+`changed_splits`). A run trained before split hashes were recorded is refused the same way.
+Evaluating a smoke run is fine too; it records split hashes like any run does.
 Rows the run trained on stay excluded in both cases, matched by id and by input, so a record renamed
 after training is still recognised. So are rows of the same scenario as a training row: its current
-group, or a near-duplicate of its text (kept in the manifest, so this holds even after the training
-row is removed). `metrics.json` lists them as `excluded_related_rows`.
+group, an explicit `related_example_id` link to or from it, or a near-duplicate of its text. The
+links and texts are kept in the manifest, so this holds even after the training row is removed. `metrics.json` lists them as `excluded_related_rows`.
 
 Results are written to `runs/<run>/eval/<split>/`:
 

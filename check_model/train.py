@@ -164,7 +164,8 @@ def load_tokenizer(name_or_path: str, revision: str | None, trust_remote_code: b
 
 
 def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir: str | Path,
-          source_files: list[dict], max_steps: int | None = None, mode: str = "train") -> dict:
+          source_files: list[dict], max_steps: int | None = None, mode: str = "train",
+          split_sha256: dict | None = None) -> dict:
     """Trains, saves and returns the manifest. `train_rows` must all have a target;
     `source_files` is the prepare report's `sources` (paths and sha256 of the data)."""
     import peft
@@ -273,6 +274,11 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
             "train_texts": [r.get("similarity_text", "") for r in train_rows],
             "val_ids": [r["id"] for r in val_rows],
             "source_files": source_files,
+            # The prepared split files this run was trained from (splits_provenance.json).
+            "split_sha256": split_sha256 or {},
+            # Explicit links from each training row, so a row linked to one stays excluded from
+            # scoring even after the training row is removed from the data.
+            "train_links": {r["id"]: r.get("links", []) for r in train_rows},
         },
         "token_lengths": {"train": train_stats, "val": val_stats},
         "metrics": metrics,

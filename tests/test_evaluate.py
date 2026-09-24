@@ -149,3 +149,15 @@ def test_related_rows_are_excluded_and_listed(tmp_path):
     metrics = evaluate_rows(EchoModel(decide(CLIMB_EXTREME)), rows(), split="val", train_ids=set(),
                             out_dir=tmp_path, related_to_training=frozenset({"r1"}))
     assert metrics["excluded_related_rows"] == ["r1"] and metrics["scored"] == 2
+
+
+def test_explicit_links_to_a_removed_training_row_still_relate():
+    from check_model.evaluate import training_relatives
+
+    points_at = dict(_row("a", "a", "Consulting the archive's registers."), links=["gone"])
+    pointed_to = _row("b", "b", "An unrelated-looking scene about banners.")
+    unrelated = _row("c", "c", "A merchant asks fifty copper coins for a used backpack.")
+    related = training_relatives([points_at, pointed_to, unrelated], train_ids={"gone"},
+                                 train_fingerprints=frozenset(), train_texts=[], threshold=None,
+                                 train_links={"gone": ["b"]})
+    assert related == {"a", "b"}  # threshold None: links alone, no similarity needed

@@ -165,3 +165,10 @@ def test_a_missing_or_unreadable_source_is_a_reported_error(catalog, tmp_path):
     assert found[0][0] == "absent.json" and "source file not found" in found[0][1]
     assert found[1][0] == "broken.json" and "not valid JSON" in found[1][1]
     assert found[2][0] == "list.json" and "must hold a JSON object" in found[2][1]
+
+
+@pytest.mark.parametrize("key", ["skill_catalog", "attribute_catalog"])
+def test_malformed_catalog_metadata_is_a_reported_error(catalog, subset, write_source, key):
+    subset[key] = "53680ef9"
+    _, report = load(catalog, write_source(subset))
+    assert any(f"{key} must be an object" in m for _, m in messages(report))

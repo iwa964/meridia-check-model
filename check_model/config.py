@@ -126,6 +126,12 @@ def _check_ranges(config: dict) -> None:
 def load_config(path: str | Path | None) -> dict:
     if path is None:
         return copy.deepcopy(DEFAULTS)
-    config = _merge(DEFAULTS, yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {})
+    document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    if document is None:  # an empty file: every default
+        document = {}
+    if not isinstance(document, dict):
+        # [] or false would otherwise read as "no overrides" and train the defaults.
+        raise ValueError(f"{path}: the config must be a mapping of sections, got {type(document).__name__}")
+    config = _merge(DEFAULTS, document)
     _check_ranges(config)
     return config

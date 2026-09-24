@@ -184,6 +184,17 @@ def test_each_tiny_smoke_run_keeps_its_own_base(tmp_path, monkeypatch):
     assert len(bases) == 2 and bases[0] != bases[1]
     assert all(Path(b, "config.json").exists() for b in bases)
 
+    # A smoke run is prepared like any other, so its split hashes are recorded and scoring it
+    # on unchanged data needs no override; a run recorded without them is refused, by name.
+    run = sorted((tmp_path / "runs").iterdir())[0]
+    main(["evaluate", "--run", str(run), "--split", "val"])
+    manifest_path = run / "run_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["examples"]["split_sha256"]
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(SystemExit, match="val split: trained on no recorded hash, now [0-9a-f]{12}"):
+        main(["evaluate", "--run", str(run), "--split", "val"])
+
 
 def test_evaluate_uses_the_runs_own_data_and_refuses_another(tiny, tmp_path, monkeypatch):
     import yaml
@@ -310,3 +321,32 @@ def test_a_new_sibling_of_a_training_row_is_not_scored(tiny, tmp_path):
     metrics = json.loads((run / "eval" / "val" / "metrics.json").read_text())
     scored = [json.loads(line)["id"] for line in (run / "eval" / "val" / "predictions.jsonl").read_text().splitlines()]
     assert twin["id"] in metrics["excluded_related_rows"] and twin["id"] not in scored
+
+
+def test_evaluate_refuses_split_contents_that_changed_with_the_same_sources(tiny, tmp_path, monkeypatch):
+    import yaml
+
+    import check_model.adapter as adapter
+    from check_model.__main__ import main
+
+    root = Path(__file__).resolve().parent.parent
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(SUBSET)], "catalog": str(root / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+    assert set(json.loads((run / "run_manifest.json").read_text())["examples"]["split_sha256"]) == {"train", "val", "test"}
+
+    original = adapter.Row.to_json  # a changed adapter: same source bytes, different prepared rows
+    monkeypatch.setattr(adapter.Row, "to_json", lambda self: dict(original(self), adapter_version=2))
+    main(["prepare", "--config", str(cfg)])
+    with pytest.raises(SystemExit, match="val split: trained on"):
+        main(["evaluate", "--run", str(run), "--split", "val"])
+    main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])
+    revision = json.loads((run / "eval" / "val" / "metrics.json").read_text())["data_revision"]
+    assert revision["matches_training"] is False and revision["changed_sources"] == []
+    assert {c["split"] for c in revision["changed_splits"]} >= {"val"}

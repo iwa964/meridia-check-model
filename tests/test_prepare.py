@@ -148,3 +148,17 @@ def test_context_limit_is_read_from_the_usual_fields(config, tokenizer, expected
         return SimpleNamespace(**{k: ns(v) if isinstance(v, dict) else v for k, v in d.items()})
 
     assert context_limit_of(ns(config), ns(tokenizer) if tokenizer else None) == expected
+
+
+@pytest.mark.parametrize("document", ["[]", "false", "0", "- a\n- b"])
+def test_a_config_that_is_not_a_mapping_is_refused(tmp_path, document):
+    path = tmp_path / "bad.yaml"
+    path.write_text(document, encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a mapping"):
+        load_config(path)
+
+
+def test_an_empty_config_file_means_every_default(tmp_path):
+    path = tmp_path / "empty.yaml"
+    path.write_text("", encoding="utf-8")
+    assert load_config(path) == load_config(None)

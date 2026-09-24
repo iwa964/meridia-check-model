@@ -72,6 +72,7 @@ class Row:
             "id": self.id, "source": self.source, "section": self.section, "scope": self.scope,
             "split": self.split, "group": self.group, "lang": self.lang, "input": self.input,
             "reference": self.reference, "target": self.target, "similarity_text": self.similarity_text,
+            "links": self.links,
         }
 
 
@@ -262,6 +263,12 @@ def _classify(record: dict, kind: str, catalog: Catalog, lang: str) -> tuple[dic
     return _input(record, lang), {"roll_required": True, "options": options}, None
 
 
+def _meta(data: dict, key: str) -> dict:
+    """A catalog-metadata object, or {} when absent; a malformed one is reported by load_rows."""
+    value = data.get(key)
+    return value if isinstance(value, dict) else {}
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -291,10 +298,16 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
         info = {
             "path": source, "sha256": _sha256(path), "schema_version": version,
             "scenario_scope": data.get("scenario_scope"), "split": data.get("split"),
-            "skill_catalog_blob_sha": (data.get("skill_catalog") or {}).get("blob_sha"),
-            "attribute_catalog_blob_sha": (data.get("attribute_catalog") or {}).get("blob_sha"),
+            "skill_catalog_blob_sha": _meta(data, "skill_catalog").get("blob_sha"),
+            "attribute_catalog_blob_sha": _meta(data, "attribute_catalog").get("blob_sha"),
         }
         report.sources.append(info)
+        bad_meta = [k for k in ("skill_catalog", "attribute_catalog")
+                    if data.get(k) is not None and not isinstance(data.get(k), dict)]
+        if bad_meta:
+            report.errors.append({"source": source, "id": None,
+                                  "message": f"{', '.join(bad_meta)} must be an object"})
+            continue
         if version not in SUPPORTED_SCHEMA_VERSIONS:
             report.errors.append({"source": source, "id": None, "message":
                                   f"schema_version {version!r} is not one of {SUPPORTED_SCHEMA_VERSIONS}"})

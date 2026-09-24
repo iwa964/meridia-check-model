@@ -65,7 +65,8 @@ def cmd_train(args) -> None:
     if not train_rows:
         sys.exit("no training rows")
     run_dir = _run_dir(config, config["run_name"])
-    manifest = train(config, train_rows, val_rows, run_dir=run_dir, source_files=report.sources)
+    manifest = train(config, train_rows, val_rows, run_dir=run_dir, source_files=report.sources,
+                     split_sha256=_provenance(config).get("split_sha256"))
     print(json.dumps(manifest["metrics"], indent=2))
     print(f"saved {run_dir}")
 
@@ -100,6 +101,26 @@ def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None
     if other:
         return f"{prepared} holds {other} rows, but the run's prompts are in {lang!r}"
     return None
+
+
+def _provenance(config: dict) -> dict:
+    from .prepare import PROVENANCE
+
+    return json.loads((Path(config["data"]["prepared_dir"]) / PROVENANCE).read_text(encoding="utf-8"))
+
+
+def _changed_splits(config: dict, manifest: dict) -> list[dict]:
+    """Prepared split files whose content differs from the ones the run was trained from. The
+    same sources and settings can still give different rows after an adapter or splitter change."""
+    trained = manifest["examples"].get("split_sha256") or {}
+    now = _provenance(config).get("split_sha256") or {}
+    return [{"split": s, "trained_sha256": trained.get(s), "prepared_sha256": now.get(s)}
+            for s in ("train", "val", "test") if trained.get(s) != now.get(s)]
+
+
+def _short(sha256: str | None, missing: str = "no recorded hash") -> str:
+    """A hash cut for a message; the fallback whole (cutting it too printed "no recorded ")."""
+    return sha256[:12] if sha256 else missing
 
 
 def _changed_sources(config: dict, manifest: dict) -> list[dict]:
@@ -139,9 +160,13 @@ def cmd_evaluate(args) -> None:
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
     changed = _changed_sources(config, model.manifest)
-    if changed and not args.allow_data_change:
-        listed = "; ".join(f"{c['path']}: trained on {(c['trained_sha256'] or 'no recorded hash')[:12]}, "
-                           f"prepared from {c['prepared_sha256'][:12]}" for c in changed)
+    changed_splits = _changed_splits(config, model.manifest)
+    if (changed or changed_splits) and not args.allow_data_change:
+        listed = "; ".join(
+            [f"{c['path']}: trained on {_short(c['trained_sha256'])}, "
+             f"prepared from {_short(c['prepared_sha256'])}" for c in changed]
+            + [f"{c['split']} split: trained on {_short(c['trained_sha256'])}, "
+               f"now {_short(c['prepared_sha256'], 'absent')}" for c in changed_splits])
         sys.exit(f"refusing to evaluate: the prepared data is not the revision the run was trained on ({listed}). "
                  "Pass --allow-data-change to score it anyway; trained rows stay excluded and the metrics "
                  "record the change.")
@@ -150,12 +175,14 @@ def cmd_evaluate(args) -> None:
     all_rows = [r for s in ("train", "val", "test") for r in read_split(config["data"]["prepared_dir"], s)]
     related = training_relatives(all_rows, train_ids=train_ids, train_fingerprints=fingerprints,
                                  train_texts=model.manifest["examples"].get("train_texts", []),
+                                 train_links=model.manifest["examples"].get("train_links", {}),
                                  threshold=model.manifest["config"]["data"]["near_duplicate_threshold"])
     out = args.out or Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,
                             train_fingerprints=fingerprints, related_to_training=frozenset(related),
                             include_training_rows=args.split == "train",
-                            data_revision={"matches_training": not changed, "changed_sources": changed},
+                            data_revision={"matches_training": not (changed or changed_splits),
+                                           "changed_sources": changed, "changed_splits": changed_splits},
                             batch_size=config["inference"]["batch_size"])
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
     print(f"per-example predictions: {Path(out) / 'predictions.jsonl'}")
@@ -204,7 +231,8 @@ def cmd_smoke(args) -> None:
 
     run_dir = _run_dir(config, "smoke")
     manifest = train(config, picked, [], run_dir=run_dir, source_files=report.sources,
-                     max_steps=smoke["max_steps"], mode="smoke")
+                     max_steps=smoke["max_steps"], mode="smoke",
+                     split_sha256=_provenance(config).get("split_sha256"))
     losses = [e["loss"] for e in _train_log(run_dir) if "loss" in e]
     done("train", f"{manifest['global_steps']} steps, loss {losses[0] if losses else '?'} -> "
                   f"{losses[-1] if losses else '?'}")

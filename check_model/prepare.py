@@ -8,6 +8,7 @@ outputs are build products and are not committed.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -58,15 +59,17 @@ def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool 
     replace the last clean split files with partial ones."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    hashes = {}
     for split in ("train", "val", "test") if splits else ():
-        with (out / f"{split}.jsonl").open("w", encoding="utf-8") as f:
-            for row in rows:
-                if row.split == split:
-                    f.write(json.dumps(row.to_json(), ensure_ascii=False) + "\n")
+        text = "".join(json.dumps(row.to_json(), ensure_ascii=False) + "\n" for row in rows if row.split == split)
+        (out / f"{split}.jsonl").write_text(text, encoding="utf-8")
+        hashes[split] = hashlib.sha256(text.encode("utf-8")).hexdigest()
     if splits:
-        # What the split files were built from. Written only beside them: report.json is also
-        # rewritten by a failed prepare, so it cannot say where the kept split files came from.
-        provenance = {"sources": report.sources, "split_config": split_config}
+        # What the split files were built from, and what they hold. Written only beside them:
+        # report.json is also rewritten by a failed prepare, so it cannot say where the kept split
+        # files came from. The content hashes catch a change the sources and settings do not --
+        # new adapter or splitting code yields different rows from the same bytes.
+        provenance = {"sources": report.sources, "split_config": split_config, "split_sha256": hashes}
         (out / PROVENANCE).write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "report.json").write_text(json.dumps(report.to_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

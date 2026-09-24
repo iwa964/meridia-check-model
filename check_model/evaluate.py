@@ -34,17 +34,22 @@ def input_fingerprint(query: dict) -> str:
 
 
 def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_fingerprints: frozenset[str],
-                        train_texts: list[str], threshold: float | None) -> set[str]:
+                        train_texts: list[str], threshold: float | None,
+                        train_links: dict[str, list[str]] | None = None) -> set[str]:
     """Ids of rows that are not training rows themselves but belong to the same scenario as one:
     they share a current group with a training row (a link or similarity added after training
-    joins them), or their text is a near-duplicate of a training row's -- which also covers a
-    training row removed from the data since. Scoring them would leak the scenario."""
+    joins them), they are explicitly linked to or from a training row (recorded at training,
+    so this survives the training row's removal), or their text is a near-duplicate of a
+    training row's (which also survives removal). Scoring them would leak the scenario."""
     from .splits import similar_pairs
 
     trained = {r["id"] for r in all_rows
                if r["id"] in train_ids or input_fingerprint(r["input"]) in train_fingerprints}
     groups = {r["group"] for r in all_rows if r["id"] in trained}
     related = {r["id"] for r in all_rows if r["group"] in groups and r["id"] not in trained}
+    linked_from_training = {i for links in (train_links or {}).values() for i in links}
+    related |= {r["id"] for r in all_rows if r["id"] not in trained
+                and (r["id"] in linked_from_training or set(r.get("links") or []) & set(train_ids))}
     if threshold is not None and train_texts:
         texts = {r["id"]: r.get("similarity_text") or "" for r in all_rows if r["id"] not in trained}
         texts.update({f"\0train{i}": t for i, t in enumerate(train_texts)})
