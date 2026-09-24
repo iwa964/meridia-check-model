@@ -37,8 +37,8 @@ Run every command from the repository root; config paths are relative to it.
 python -m check_model prepare --config configs/sft_example.yaml
 ```
 
-This writes `build/data/{train,val,test}.jsonl`, `build/data/splits_provenance.json` (the sources
-those split files were built from, which `evaluate` checks) and `build/data/report.json`, and prints a
+This writes `build/data/{train,val,test}.jsonl`, `build/data/splits_provenance.json` (the sources and
+split settings those files were built from, which `evaluate` checks) and `build/data/report.json`, and prints a
 summary. Every source record lands in exactly one bucket:
 
 | Bucket | Meaning | 2026-09-23, dataset at db81744 (50 records; rerun `prepare` for current figures) |
@@ -181,11 +181,13 @@ python -m check_model evaluate --run runs/<run> --split val    # or test / train
 ```
 
 `evaluate` and `predict` use the config the run was trained with. Pass `--config` to override it;
-`evaluate` then refuses prepared data whose sources or prompt language differ from the run's,
+`evaluate` then refuses prepared data whose sources, prompt language or split settings (`val_fraction`,
+`split_seed`, `near_duplicate_threshold`, `extra_groups`) differ from the run's,
 since scoring another experiment's data would still print plausible metrics. It also compares each
 source's SHA-256 with the one recorded at training: data edited since then is refused unless you
 pass `--allow-data-change`, and `metrics.json` records the revision either way (`data_revision`).
-Rows the run trained on stay excluded in both cases.
+Rows the run trained on stay excluded in both cases, matched by id and by input, so a record renamed
+after training is still recognised.
 
 Results are written to `runs/<run>/eval/<split>/`:
 

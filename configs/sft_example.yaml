@@ -1,4 +1,5 @@
-# Starting configuration for a first real training run. Edit freely; unknown keys are errors.
+# Starting configuration for a first real training run. Edit freely; unknown keys and values of
+# the wrong type (a quoted "false", 2e-4 without a dot, which YAML reads as a string) are errors.
 # Paths are relative to the repository root. Why each value was chosen: TRAINING.md.
 
 run_name: check-sft

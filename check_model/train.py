@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import prompt
 from .catalog import load_catalog
+from .evaluate import input_fingerprint
 
 IGNORE_INDEX = -100
 
@@ -247,6 +248,7 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
         "catalog_source": catalog.source,
         "examples": {
             "train_ids": [r["id"] for r in train_rows],
+            "train_fingerprints": sorted(input_fingerprint(r["input"]) for r in train_rows),
             "val_ids": [r["id"] for r in val_rows],
             "source_files": source_files,
         },

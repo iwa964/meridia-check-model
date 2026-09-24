@@ -22,8 +22,15 @@ validation is held out but drawn from the same general scenes as training.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+
+
+def input_fingerprint(query: dict) -> str:
+    """A training input's identity independent of its id: a record renamed after training keeps
+    its fingerprint, so it is still recognised as trained on."""
+    return hashlib.sha256(json.dumps(query, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def _key(check: dict) -> tuple[str, str]:
@@ -63,11 +70,15 @@ def summarize(scored: list[dict]) -> dict:
 
 def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], out_dir: str | Path,
                   include_training_rows: bool = False, batch_size: int = 8,
-                  data_revision: dict | None = None) -> dict:
+                  data_revision: dict | None = None, train_fingerprints: frozenset[str] = frozenset()) -> dict:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    seen = [r for r in rows if r["id"] in train_ids]
-    scored_rows = rows if include_training_rows else [r for r in rows if r["id"] not in train_ids]
+
+    def trained(row: dict) -> bool:
+        return row["id"] in train_ids or input_fingerprint(row["input"]) in train_fingerprints
+
+    seen = [r for r in rows if trained(r)]
+    scored_rows = rows if include_training_rows else [r for r in rows if not trained(r)]
     predictions = model.predict_many([r["input"] for r in scored_rows], batch_size=batch_size)
     records, scores = [], []
     for row, pred in zip(scored_rows, predictions):
@@ -77,7 +88,7 @@ def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], o
             "id": row["id"], "source": row["source"], "split": row["split"], "input": row["input"],
             "reference": row["reference"], "raw_output": pred["raw_output"], "decision": pred["decision"],
             "format_errors": pred["errors"], "scores": s, "game_request": pred["game_request"],
-            "note": pred["note"], "trained_on": row["id"] in train_ids,
+            "note": pred["note"], "trained_on": trained(row),
         })
     held_out = bool(records) and not any(r["trained_on"] for r in records) and split != "train"
     if not records:

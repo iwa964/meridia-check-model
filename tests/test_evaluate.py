@@ -1,6 +1,6 @@
 import json
 
-from check_model.evaluate import evaluate_rows, score, summarize
+from check_model.evaluate import evaluate_rows, input_fingerprint, score, summarize
 
 CLIMB_EXTREME = {"kind": "skill", "name": "Climbing", "difficulty": "extreme"}
 # dice_train_000038's accepted set: normal Economics or normal Mathematics.
@@ -103,3 +103,11 @@ def test_a_split_whose_rows_were_all_trained_on_claims_nothing(tmp_path):
     assert metrics["scored"] == 0
     assert metrics["held_out"] is False and metrics["independent_test"] is False
     assert "every test row was used in training" in metrics["note"]
+
+
+def test_a_renamed_training_row_is_still_excluded(tmp_path):
+    renamed = rows()  # r0's input is the one the run trained on, under another id then
+    trained = {input_fingerprint(renamed[0]["input"])}
+    metrics = evaluate_rows(EchoModel(decide(CLIMB_EXTREME)), renamed[:1], split="val", train_ids={"old_id"},
+                            out_dir=tmp_path, train_fingerprints=frozenset(trained))
+    assert metrics["scored"] == 0 and metrics["excluded_trained_rows"] == ["r0"]

@@ -17,6 +17,9 @@ from .splits import assign_splits
 
 
 PROVENANCE = "splits_provenance.json"
+#: The data settings that decide which rows land in which split: re-preparing the same sources
+#: with any of these changed yields a different validation cohort.
+SPLIT_KEYS = ("language", "val_fraction", "split_seed", "near_duplicate_threshold", "extra_groups")
 
 
 def build(config: dict) -> tuple[list[Row], Report]:
@@ -49,7 +52,8 @@ def _note_moves(rows: list[Row], report: Report, prepared_dir: str | Path) -> No
             report.warnings.append(f"{row.id} moved from {before[row.id]} to {row.split} since the last prepare")
 
 
-def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool = True) -> None:
+def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool = True,
+          split_config: dict | None = None) -> None:
     """The report always; the split files only when `splits` -- a prepare with errors must not
     replace the last clean split files with partial ones."""
     out = Path(out_dir)
@@ -62,8 +66,8 @@ def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool 
     if splits:
         # What the split files were built from. Written only beside them: report.json is also
         # rewritten by a failed prepare, so it cannot say where the kept split files came from.
-        (out / PROVENANCE).write_text(json.dumps({"sources": report.sources}, ensure_ascii=False, indent=2) + "\n",
-                                      encoding="utf-8")
+        provenance = {"sources": report.sources, "split_config": split_config}
+        (out / PROVENANCE).write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "report.json").write_text(json.dumps(report.to_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

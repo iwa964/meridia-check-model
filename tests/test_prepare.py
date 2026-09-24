@@ -78,7 +78,42 @@ def test_a_failed_prepare_does_not_vouch_for_the_kept_splits(tmp_path, subset, w
     with pytest.raises(SystemExit):  # source B: fails, splits from A are kept
         main(["prepare", "--config", config_file(tmp_path, source_b)])
     prepared = {"data": {"prepared_dir": str(tmp_path / "prepared")}}
-    trained_on_b = {"config": {"data": {"sources": [source_b]}}, "prompt": {"language": "en"}}
+    data_a = load_config(config_file(tmp_path, SUBSET))["data"]
+    trained_on_b = {"config": {"data": dict(data_a, sources=[source_b])}, "prompt": {"language": "en"}}
     assert "trained on" in _data_mismatch(prepared, trained_on_b, [])
-    trained_on_a = {"config": {"data": {"sources": [str(SUBSET)]}}, "prompt": {"language": "en"}}
+    trained_on_a = {"config": {"data": data_a}, "prompt": {"language": "en"}}
     assert _data_mismatch(prepared, trained_on_a, []) is None
+
+
+def test_a_different_split_of_the_same_sources_is_refused(tmp_path):
+    from check_model.__main__ import _data_mismatch
+
+    main(["prepare", "--config", config_file(tmp_path, SUBSET, split_seed=1)])
+    prepared = {"data": {"prepared_dir": str(tmp_path / "prepared")}}
+    trained = {"config": {"data": load_config(config_file(tmp_path, SUBSET, split_seed=0))["data"]},
+               "prompt": {"language": "en"}}
+    assert "the validation rows differ" in _data_mismatch(prepared, trained, [])
+
+
+@pytest.mark.parametrize("section, key, value", [
+    ("model", "trust_remote_code", "false"),   # a truthy string, not False
+    ("train", "learning_rate", "2e-4"),        # PyYAML reads 2e-4 without a dot as a string
+    ("train", "max_steps", 1.5),
+    ("data", "sources", "training_files/dice_rolling_train.json"),
+])
+def test_config_values_must_have_their_defaults_type(tmp_path, section, key, value):
+    path = tmp_path / "bad.yaml"
+    path.write_text(yaml.safe_dump({section: {key: value}}), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"config key '{section}.{key}' must be"):
+        load_config(path)
+
+
+def test_documented_null_and_list_values_are_accepted(tmp_path):
+    path = tmp_path / "ok.yaml"
+    path.write_text(yaml.safe_dump({"data": {"near_duplicate_threshold": None},
+                                    "model": {"revision": "abc123"},
+                                    "lora": {"target_modules": ["q_proj", "v_proj"]}}), encoding="utf-8")
+    config = load_config(path)
+    assert config["data"]["near_duplicate_threshold"] is None
+    assert config["lora"]["target_modules"] == ["q_proj", "v_proj"]
+    assert load_config(ROOT / "configs" / "sft_example.yaml") and load_config(ROOT / "configs" / "smoke.yaml")

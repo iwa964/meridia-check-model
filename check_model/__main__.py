@@ -14,11 +14,12 @@ from .config import load_config
 
 
 def _prepare(config: dict):
-    from .prepare import build, summary, write
+    from .prepare import SPLIT_KEYS, build, summary, write
 
     rows, report = build(config)
     print(summary(report))
-    write(rows, report, config["data"]["prepared_dir"], splits=not report.errors)
+    write(rows, report, config["data"]["prepared_dir"], splits=not report.errors,
+          split_config={k: config["data"][k] for k in SPLIT_KEYS})
     if report.errors:
         print(f"\n{len(report.errors)} error(s): fix the source records above; nothing downstream will run; "
               "the split files from the last clean prepare are left as they were.",
@@ -80,7 +81,7 @@ def _run_config(args) -> dict:
 def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None:
     """Why the prepared data is not the data this run was trained on, or None. Scoring a run on
     another experiment's prepared files would still print plausible metrics."""
-    from .prepare import PROVENANCE
+    from .prepare import PROVENANCE, SPLIT_KEYS
 
     prepared = Path(config["data"]["prepared_dir"])
     if not (prepared / PROVENANCE).exists():
@@ -90,6 +91,10 @@ def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None
     want = list(manifest["config"]["data"]["sources"])
     if have != want:
         return f"{prepared} was prepared from {have}, but the run was trained on {want}"
+    trained_split = {k: manifest["config"]["data"].get(k) for k in SPLIT_KEYS}
+    if provenance.get("split_config") != trained_split:
+        return (f"{prepared} was split with {provenance.get('split_config')}, but the run was trained on a "
+                f"split made with {trained_split}: the validation rows differ")
     lang = manifest["prompt"]["language"]
     other = sorted({r["lang"] for r in rows} - {lang})
     if other:
@@ -141,8 +146,10 @@ def cmd_evaluate(args) -> None:
                  "Pass --allow-data-change to score it anyway; trained rows stay excluded and the metrics "
                  "record the change.")
     train_ids = set(model.manifest["examples"]["train_ids"])
+    fingerprints = frozenset(model.manifest["examples"].get("train_fingerprints", []))
     out = args.out or Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,
+                            train_fingerprints=fingerprints,
                             include_training_rows=args.split == "train",
                             data_revision={"matches_training": not changed, "changed_sources": changed},
                             batch_size=config["inference"]["batch_size"])

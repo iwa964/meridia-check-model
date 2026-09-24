@@ -64,6 +64,9 @@ def test_train_save_reload_predict(tiny, tmp_path):
         assert (run / name).exists(), name
     saved = json.loads((run / "run_manifest.json").read_text())
     assert saved["examples"]["train_ids"] == [r["id"] for r in tiny["rows"][:3]]
+    from check_model.evaluate import input_fingerprint
+
+    assert saved["examples"]["train_fingerprints"] == sorted(input_fingerprint(r["input"]) for r in tiny["rows"][:3])
     assert saved["global_steps"] == 2 == manifest["global_steps"]
     assert saved["prompt"]["system_prompt"] == tiny["system"]
 
@@ -204,7 +207,7 @@ def test_evaluate_uses_the_runs_own_data_and_refuses_another(tiny, tmp_path, mon
     assert (run / "eval" / "val" / "metrics.json").exists()
 
     main(["prepare", "--config", config("zh", language="zh")])
-    with pytest.raises(SystemExit, match="prompts are in 'en'"):
+    with pytest.raises(SystemExit, match="split with \\{'language': 'zh'"):
         main(["evaluate", "--run", str(run), "--split", "val", "--config", config("zh", language="zh")])
 
 

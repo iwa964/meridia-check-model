@@ -61,6 +61,33 @@ DEFAULTS: dict = {
 }
 
 
+#: Keys whose value may also be null, and the one string key that may also be a list.
+NULLABLE = {"data.near_duplicate_threshold", "model.revision"}
+STR_OR_LIST = {"lora.target_modules"}
+
+
+def _check_type(path: str, default, value) -> None:
+    """A value must have its default's type: a quoted "false" is a truthy string, not False, and
+    PyYAML reads 2e-4 (no dot) as a string -- both would otherwise pass through unnoticed."""
+    if value is None and (default is None or path in NULLABLE):
+        return
+    if isinstance(default, bool):
+        ok = isinstance(value, bool)
+    elif isinstance(default, int):
+        ok = isinstance(value, int) and not isinstance(value, bool)
+    elif isinstance(default, float):
+        ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+    elif isinstance(default, list):
+        ok = isinstance(value, list)
+    elif isinstance(default, str):
+        ok = isinstance(value, str) or (path in STR_OR_LIST and isinstance(value, list))
+    else:  # a null default takes a string (model.revision)
+        ok = isinstance(value, str)
+    if not ok:
+        expected = "string" if default is None else type(default).__name__
+        raise ValueError(f"config key {path!r} must be a {expected}, got {value!r}")
+
+
 def _merge(base: dict, override: dict, path: str = "") -> dict:
     out = copy.deepcopy(base)
     for key, value in (override or {}).items():
@@ -71,6 +98,7 @@ def _merge(base: dict, override: dict, path: str = "") -> dict:
                 raise ValueError(f"config key {path + key!r} must be a mapping")
             out[key] = _merge(base[key], value, path + key + ".")
         else:
+            _check_type(path + key, base[key], value)
             out[key] = value
     return out
 
