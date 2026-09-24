@@ -172,3 +172,18 @@ def test_malformed_catalog_metadata_is_a_reported_error(catalog, subset, write_s
     subset[key] = "53680ef9"
     _, report = load(catalog, write_source(subset))
     assert any(f"{key} must be an object" in m for _, m in messages(report))
+
+
+@pytest.mark.parametrize("misspelled", ["pending_example", "example"])
+def test_records_under_a_misspelled_section_name_are_an_error(catalog, subset, write_source, misspelled):
+    subset[misspelled] = subset.pop("pending_examples")
+    _, report = load(catalog, write_source(subset))
+    assert any(f"unknown section {misspelled!r}" in m for _, m in messages(report))
+
+
+def test_a_metadata_list_without_ids_is_not_mistaken_for_records(catalog, subset, write_source):
+    # The shape of the dataset's own skill_catalog_history entries: {blob_sha, path, repository}.
+    subset["skill_catalog_history"] = [{"blob_sha": "0" * 40, "path": "Scripts/profile/skill/SkillBank.gd",
+                                        "repository": "iwa964/MeridiaGame"}]
+    _, report = load(catalog, write_source(subset))
+    assert report.errors == []

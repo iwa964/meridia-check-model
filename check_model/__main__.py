@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from .config import load_config
+from .prepare import split_hashes
 
 
 def _prepare(config: dict):
@@ -66,7 +67,7 @@ def cmd_train(args) -> None:
         sys.exit("no training rows")
     run_dir = _run_dir(config, config["run_name"])
     manifest = train(config, train_rows, val_rows, run_dir=run_dir, source_files=report.sources,
-                     split_sha256=_provenance(config).get("split_sha256"))
+                     split_sha256=split_hashes(config["data"]["prepared_dir"]))
     print(json.dumps(manifest["metrics"], indent=2))
     print(f"saved {run_dir}")
 
@@ -103,17 +104,12 @@ def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None
     return None
 
 
-def _provenance(config: dict) -> dict:
-    from .prepare import PROVENANCE
-
-    return json.loads((Path(config["data"]["prepared_dir"]) / PROVENANCE).read_text(encoding="utf-8"))
-
-
 def _changed_splits(config: dict, manifest: dict) -> list[dict]:
     """Prepared split files whose content differs from the ones the run was trained from. The
-    same sources and settings can still give different rows after an adapter or splitter change."""
+    same sources and settings can still give different rows after an adapter or splitter change,
+    and a split file can be edited or replaced after `prepare`; so the files are hashed now."""
     trained = manifest["examples"].get("split_sha256") or {}
-    now = _provenance(config).get("split_sha256") or {}
+    now = split_hashes(config["data"]["prepared_dir"])
     return [{"split": s, "trained_sha256": trained.get(s), "prepared_sha256": now.get(s)}
             for s in ("train", "val", "test") if trained.get(s) != now.get(s)]
 
@@ -140,7 +136,14 @@ def cmd_predict(args) -> None:
 
     config = _run_config(args)
     text = Path(args.input).read_text(encoding="utf-8") if args.input != "-" else sys.stdin.read()
-    queries = json.loads(text)
+    try:
+        queries = json.loads(text)
+    except json.JSONDecodeError as e:
+        sys.exit(f"--input {args.input}: not valid JSON ({e})")
+    if not isinstance(queries, (dict, list)):
+        # A string would otherwise be iterated as one query per character, and null or a number crash.
+        sys.exit(f"--input {args.input}: expected one query object or a list of them, "
+                 f"got {type(queries).__name__}")
     single = isinstance(queries, dict)
     model = CheckModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
     results = model.predict_many([queries] if single else queries, batch_size=config["inference"]["batch_size"])
@@ -232,7 +235,7 @@ def cmd_smoke(args) -> None:
     run_dir = _run_dir(config, "smoke")
     manifest = train(config, picked, [], run_dir=run_dir, source_files=report.sources,
                      max_steps=smoke["max_steps"], mode="smoke",
-                     split_sha256=_provenance(config).get("split_sha256"))
+                     split_sha256=split_hashes(config["data"]["prepared_dir"]))
     losses = [e["loss"] for e in _train_log(run_dir) if "loss" in e]
     done("train", f"{manifest['global_steps']} steps, loss {losses[0] if losses else '?'} -> "
                   f"{losses[-1] if losses else '?'}")

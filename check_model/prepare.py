@@ -61,9 +61,10 @@ def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool 
     out.mkdir(parents=True, exist_ok=True)
     hashes = {}
     for split in ("train", "val", "test") if splits else ():
-        text = "".join(json.dumps(row.to_json(), ensure_ascii=False) + "\n" for row in rows if row.split == split)
-        (out / f"{split}.jsonl").write_text(text, encoding="utf-8")
-        hashes[split] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        data = "".join(json.dumps(row.to_json(), ensure_ascii=False) + "\n" for row in rows
+                       if row.split == split).encode("utf-8")
+        (out / f"{split}.jsonl").write_bytes(data)  # bytes: no newline translation between file and hash
+        hashes[split] = hashlib.sha256(data).hexdigest()
     if splits:
         # What the split files were built from, and what they hold. Written only beside them:
         # report.json is also rewritten by a failed prepare, so it cannot say where the kept split
@@ -72,6 +73,17 @@ def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool 
         provenance = {"sources": report.sources, "split_config": split_config, "split_sha256": hashes}
         (out / PROVENANCE).write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "report.json").write_text(json.dumps(report.to_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def split_hashes(prepared_dir: str | Path) -> dict[str, str | None]:
+    """SHA-256 of each split file as it is on disk now (None if missing). Hashed from the files,
+    never taken from splits_provenance.json: a split file edited or replaced after `prepare`
+    would still match its stale recorded hash."""
+    out = {}
+    for split in ("train", "val", "test"):
+        path = Path(prepared_dir) / f"{split}.jsonl"
+        out[split] = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+    return out
 
 
 def read_split(prepared_dir: str | Path, split: str) -> list[dict]:

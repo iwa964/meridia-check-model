@@ -318,11 +318,16 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
                 report.warnings.append(
                     f"{source}: labelled against {key.split('_blob')[0]} {info[key]}, "
                     f"but the catalog snapshot is {have}; labels are validated against the snapshot")
-        for section in data:
-            if section.endswith("_examples") or section == "examples":
-                if section not in SECTION_KIND:
-                    report.errors.append({"source": source, "id": None, "message":
-                                          f"unknown section {section!r}: the adapter does not know how to treat it"})
+        for section, value in data.items():
+            if section in SECTION_KIND:
+                continue
+            # Records always carry an id (one without is an error below), and metadata lists such
+            # as skill_catalog_history do not; so a list holding id'd objects under an unknown
+            # name is a record section misspelled, and reading past it would drop its records.
+            holds_records = isinstance(value, list) and any(isinstance(v, dict) and "id" in v for v in value)
+            if holds_records or section.endswith("_examples") or section == "examples":
+                report.errors.append({"source": source, "id": None, "message":
+                                      f"unknown section {section!r}: the adapter does not know how to treat it"})
         for section, kind in SECTION_KIND.items():
             records = data.get(section, [])
             if not isinstance(records, list):

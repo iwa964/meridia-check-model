@@ -350,3 +350,15 @@ def test_evaluate_refuses_split_contents_that_changed_with_the_same_sources(tiny
     revision = json.loads((run / "eval" / "val" / "metrics.json").read_text())["data_revision"]
     assert revision["matches_training"] is False and revision["changed_sources"] == []
     assert {c["split"] for c in revision["changed_splits"]} >= {"val"}
+
+
+    # A split file edited after prepare, its provenance untouched: the file itself is hashed.
+    monkeypatch.setattr(adapter.Row, "to_json", original)
+    main(["prepare", "--config", str(cfg)])
+    main(["evaluate", "--run", str(run), "--split", "val"])  # back to the trained contents
+    val = tmp_path / "prepared" / "val.jsonl"
+    provenance = (tmp_path / "prepared" / "splits_provenance.json").read_text()
+    val.write_text(val.read_text().splitlines()[0] + "\n", encoding="utf-8")
+    assert (tmp_path / "prepared" / "splits_provenance.json").read_text() == provenance
+    with pytest.raises(SystemExit, match="val split: trained on [0-9a-f]{12}, now [0-9a-f]{12}"):
+        main(["evaluate", "--run", str(run), "--split", "val"])

@@ -162,3 +162,17 @@ def test_an_empty_config_file_means_every_default(tmp_path):
     path = tmp_path / "empty.yaml"
     path.write_text("", encoding="utf-8")
     assert load_config(path) == load_config(None)
+
+
+@pytest.mark.parametrize("payload, message", [
+    ('"a scene"', "got str"), ("null", "got NoneType"), ("3", "got int"), ("{not json", "not valid JSON")])
+def test_predict_refuses_input_that_is_not_a_query_or_a_list(tmp_path, payload, message):
+    from check_model.__main__ import main
+
+    source = tmp_path / "queries.json"
+    source.write_text(payload, encoding="utf-8")
+    config = tmp_path / "empty.yaml"
+    config.write_text("", encoding="utf-8")
+    # Refused before any model is loaded: the run directory does not even exist.
+    with pytest.raises(SystemExit, match=message):
+        main(["predict", "--run", str(tmp_path / "no-run"), "--config", str(config), "--input", str(source)])

@@ -47,7 +47,7 @@ summary. Every source record lands in exactly one bucket:
 | eval_only | several accepted answers, none selected (`alternative_examples`) — scored against all of them, never trained on | 1 (000038) |
 | unsupported | labelled, in a form this version does not handle; the reason is listed | 6 |
 | pending / skipped | no usable label | 1 / 2 |
-| **errors** | a missing required field, a label outside the catalog, a duplicate id or input | 0 |
+| **errors** | a missing required field, a label outside the catalog, a duplicate id or input, records under a section name the adapter does not know (a misspelled one would otherwise be dropped) | 0 |
 
 **Errors stop the pipeline**, leave the last clean split files untouched, and name the record (`ERROR dice_train_000001 (…:examples[0]): unknown
 skill 'maintenance'`). A label is valid when the game would accept it: a skill must be a
@@ -140,7 +140,7 @@ model = CheckModel("runs/check-sft-20260923-120000")
 model.predict({"scene": "…", "player_action": "…"})
 ```
 ```bash
-python -m check_model predict --run runs/<run> --input query.json   # one object or a list
+python -m check_model predict --run runs/<run> --input query.json   # one object or a list; anything else is refused
 ```
 
 **Input.** These are the fields the creator was shown when labelling
@@ -184,9 +184,10 @@ python -m check_model evaluate --run runs/<run> --split val    # or test / train
 `evaluate` then refuses prepared data whose sources, prompt language or split settings (`val_fraction`,
 `split_seed`, `near_duplicate_threshold`, `extra_groups`) differ from the run's,
 since scoring another experiment's data would still print plausible metrics. It also compares each
-source's SHA-256, and each prepared split file's, with the ones recorded at training: the split
-hashes catch what the sources cannot — an adapter or splitter change that turns the same bytes
-into different rows. Data changed since training is refused unless you pass `--allow-data-change`,
+source's SHA-256, and each prepared split file's, with the ones recorded at training. The split
+files are hashed as they are on disk at evaluation time, not read back from `splits_provenance.json`,
+and their hashes catch what the sources cannot: an adapter or splitter change that turns the same
+bytes into different rows, or a split file edited or replaced after `prepare`. Data changed since training is refused unless you pass `--allow-data-change`,
 and `metrics.json` records the revision either way (`data_revision`: `changed_sources`,
 `changed_splits`). A run trained before split hashes were recorded is refused the same way.
 Evaluating a smoke run is fine too; it records split hashes like any run does.
