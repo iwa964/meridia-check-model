@@ -12,7 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from . import prompt
+from . import prompt, strictjson
 from .adapter import Report, Row, load_rows
 from .catalog import load_catalog
 from .splits import assign_splits
@@ -96,11 +96,16 @@ def split_hashes(prepared_dir: str | Path) -> dict[str, str | None]:
     return out
 
 
-#: The fields evaluation reads from a prepared row, and their types.
-ROW_FIELDS = {"id": str, "source": str, "split": str, "group": str, "input": dict, "reference": dict}
+#: Every field Row.to_json writes, and its type (target, also written, is an object or null).
+#: Evaluation depends on all of them: identity, what is asked and scored, and what decides
+#: exclusion (group, links, group_members, similarity_text) -- a row missing one would be scored
+#: with defaults nobody chose. The previous rounds checked a subset, one field at a time.
+ROW_FIELDS = {"id": str, "source": str, "section": str, "scope": str, "split": str, "group": str,
+              "lang": str, "input": dict, "reference": dict, "similarity_text": str,
+              "links": list, "group_members": list}
 
 
-def _reference_problem(reference: dict) -> str | None:
+def _reference_problem(reference: dict, catalog=None) -> str | None:
     """Why a reference is not {roll_required: bool, options: [[{kind, name, difficulty}, ...], ...]}."""
     if not isinstance(reference.get("roll_required"), bool):
         return "reference.roll_required must be true or false"
@@ -119,42 +124,82 @@ def _reference_problem(reference: dict) -> str | None:
             return f"a roll-required reference needs options of 1 to {prompt.MAX_CHECKS} check(s)"
     elif any(options):
         return "a no-roll reference cannot hold checks"
+    if catalog is not None:
+        # A label the run's parser can never accept would be scored wrong whatever the model says.
+        for check in (c for option in options for c in option):
+            error = catalog.entry_error(check)
+            if error:
+                return f"reference label {check}: {error}"
     return None
 
 
-def _row_problem(row: dict) -> str | None:
-    missing = [k for k in ROW_FIELDS if k not in row]
+def _is_id(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _row_problem(row: dict, split: str, catalog=None) -> str | None:
+    missing = [k for k in [*ROW_FIELDS, "target"] if k not in row]
     if missing:
         return f"missing {missing}"
     wrong = [k for k, kind in ROW_FIELDS.items() if not isinstance(row[k], kind)]
+    if not (row["target"] is None or isinstance(row["target"], dict)):
+        wrong.append("target")
     if wrong:
         return f"wrong type for {wrong}"
+    if not _is_id(row["id"]):
+        return "id is blank"
+    if row["split"] != split:
+        return f"split {row['split']!r} in the {split} file"
+    for key in ("links", "group_members"):
+        if not all(_is_id(i) for i in row[key]):
+            return f"{key} must hold ids"
     # The same check predict applies: a damaged input would otherwise be scored as a wrong answer.
     query_problems = prompt.query_errors(row["input"])
     if query_problems:
         return "input: " + "; ".join(query_problems)
-    return _reference_problem(row["reference"])
+    return _reference_problem(row["reference"], catalog)
 
 
-def read_split(prepared_dir: str | Path, split: str) -> list[dict]:
+def read_split(prepared_dir: str | Path, split: str, catalog=None) -> list[dict]:
+    """The rows of one prepared split file, each checked against the full row schema: strict UTF-8
+    and strict JSON, unique ids, and -- given the run's catalog -- reference labels it accepts."""
     path = Path(prepared_dir) / f"{split}.jsonl"
     if not path.exists():
         raise FileNotFoundError(f"{path} does not exist; run `python -m check_model prepare` first")
-    rows = []
-    for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-        if line.strip():
-            try:
-                row = json.loads(line)
-            except ValueError as exc:
-                raise ValueError(f"{path}:{number}: not a prepared row ({exc}); re-run prepare") from None
-            if not isinstance(row, dict):
-                raise ValueError(f"{path}:{number}: not a prepared row (a JSON object is required, got "
-                                 f"{type(row).__name__}); re-run prepare")
-            problem = _row_problem(row)
-            if problem:
-                raise ValueError(f"{path}:{number}: not a prepared row ({problem}); re-run prepare")
-            rows.append(row)
+    rows, seen = [], {}
+    for number, data in enumerate(path.read_bytes().split(b"\n"), 1):
+        def refuse(problem: str):
+            return ValueError(f"{path}:{number}: not a prepared row ({problem}); re-run prepare")
+
+        try:
+            line = data.decode("utf-8")  # strictly: a replaced byte would change the text scored
+        except UnicodeDecodeError:
+            raise refuse("not UTF-8") from None
+        if not line.strip():
+            continue
+        try:
+            row = strictjson.loads(line)
+        except ValueError as exc:
+            raise refuse(str(exc)) from None
+        if not isinstance(row, dict):
+            raise refuse(f"a JSON object is required, got {type(row).__name__}")
+        problem = _row_problem(row, split, catalog)
+        if problem:
+            raise refuse(problem)
+        if row["id"] in seen:
+            raise refuse(f"duplicate id {row['id']!r} (also at line {seen[row['id']]})")
+        seen[row["id"]] = number
+        rows.append(row)
     return rows
+
+
+def duplicate_ids(splits: dict[str, list[dict]]) -> list[str]:
+    """Ids that appear in more than one split file: each would be scored or excluded twice."""
+    count: dict[str, int] = {}
+    for rows in splits.values():
+        for row in rows:
+            count[row["id"]] = count.get(row["id"], 0) + 1
+    return sorted(i for i, n in count.items() if n > 1)
 
 
 def summary(report: Report) -> str:

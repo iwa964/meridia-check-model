@@ -59,6 +59,11 @@ def check_format(manifest: dict) -> None:
     if got != prompt.PROMPT_FORMAT_VERSION:
         raise ValueError(f"run uses prompt format {got}, this code serves format {prompt.PROMPT_FORMAT_VERSION}; "
                          "retrain, or load it with the code version that trained it")
+    # The prompt the run is served with is the recorded text; an edited copy would ask the model
+    # something it was never trained on.
+    if prompt.prompt_sha256(manifest["prompt"]["system_prompt"]) != manifest["prompt"].get("system_prompt_sha256"):
+        raise ValueError("run_manifest.json: the system prompt does not match its recorded SHA-256; "
+                         "the run's prompt was edited after training")
 
 
 def _bf16_supported(device: str) -> bool:

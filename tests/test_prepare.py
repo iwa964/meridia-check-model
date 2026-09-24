@@ -253,10 +253,11 @@ def test_a_blank_string_setting_is_refused(tmp_path, section, key):
         load_config(path)
 
 
-#: A prepared row with every field evaluation reads (the shape Row.to_json writes).
-VALID_ROW = {"id": "r1", "source": "s.json", "split": "val", "group": "r1",
-             "input": {"scene": "s", "player_action": "a"},
-             "reference": {"roll_required": False, "options": []}}
+#: A prepared row with every field Row.to_json writes.
+VALID_ROW = {"id": "r1", "source": "s.json", "section": "examples", "scope": "general", "split": "val",
+             "group": "r1", "lang": "en", "input": {"scene": "s", "player_action": "a"},
+             "reference": {"roll_required": False, "options": [[]]}, "target": None,
+             "similarity_text": "s a", "links": [], "group_members": ["r1"]}
 
 
 @pytest.mark.parametrize("line", ["null", '"a string"', "[1, 2]"])
@@ -269,7 +270,8 @@ def test_a_prepared_line_that_is_not_an_object_is_named(tmp_path, line):
 
 
 @pytest.mark.parametrize("row, problem", [
-    ({}, "missing ['id', 'source', 'split', 'group', 'input', 'reference']"),
+    ({}, "missing ['id', 'source', 'section', 'scope', 'split', 'group', 'lang', 'input', 'reference', "
+         "'similarity_text', 'links', 'group_members', 'target']"),
     ({**VALID_ROW, "input": "a scene"}, "wrong type for ['input']"),
     ({k: v for k, v in VALID_ROW.items() if k != "group"}, "missing ['group']")])
 def test_a_prepared_row_missing_what_evaluation_reads_is_named(tmp_path, row, problem):
@@ -296,7 +298,7 @@ def test_a_prepared_reference_of_the_wrong_shape_is_named(tmp_path, reference, p
 @pytest.mark.parametrize("payload", ["[]", '[{"scene": ""}, {"player_action": "a"}]'])
 def test_predict_loads_no_model_when_no_query_can_run(tmp_path, monkeypatch, capsys, payload):
     import check_model.infer as infer
-    from check_model.prompt import PROMPT_FORMAT_VERSION
+    from check_model.prompt import PROMPT_FORMAT_VERSION, prompt_sha256
 
     def no_model(*args, **kwargs):
         raise AssertionError("the model was loaded for a batch with nothing to generate")
@@ -304,8 +306,9 @@ def test_predict_loads_no_model_when_no_query_can_run(tmp_path, monkeypatch, cap
     monkeypatch.setattr(infer, "CheckModel", no_model)
     run = tmp_path / "run"
     run.mkdir()
-    (run / "run_manifest.json").write_text(json.dumps({"prompt": {"format_version": PROMPT_FORMAT_VERSION}}),
-                                           encoding="utf-8")
+    (run / "run_manifest.json").write_text(json.dumps({"prompt": {
+        "format_version": PROMPT_FORMAT_VERSION, "system_prompt": "p", "system_prompt_sha256": prompt_sha256("p")}}),
+        encoding="utf-8")
     source = tmp_path / "queries.json"
     source.write_text(payload, encoding="utf-8")
     config = tmp_path / "empty.yaml"
@@ -351,3 +354,74 @@ def test_every_row_prepare_writes_passes_read_split(tmp_path, subset, write_sour
     main(["prepare", "--config", config_file(tmp_path, write_source(subset), val_fraction=0.5)])
     rows = [r for s in ("train", "val", "test") for r in read_split(tmp_path / "prepared", s)]
     assert {r["id"]: r["reference"] for r in rows}["dice_train_000940"] == {"roll_required": False, "options": [[]]}
+
+
+@pytest.mark.parametrize("line, problem", [
+    (b'{"id": "r1", "id": "r2"}', "duplicate key(s) ['id']"),
+    (b'{"id": "r\xff"}', "not UTF-8")])
+def test_a_split_line_is_decoded_strictly(tmp_path, line, problem):
+    from check_model.prepare import read_split
+
+    (tmp_path / "val.jsonl").write_bytes(line + b"\n")
+    with pytest.raises(ValueError, match=r"val\.jsonl:1: not a prepared row \(" + re.escape(problem)):
+        read_split(tmp_path, "val")
+
+
+@pytest.mark.parametrize("change, problem", [
+    ({"links": None}, "missing ['links']"),
+    ({"group_members": None}, "missing ['group_members']"),
+    ({"similarity_text": None}, "missing ['similarity_text']"),
+    ({"group_members": [""]}, "group_members must hold ids"),
+    ({"split": "train"}, "split 'train' in the val file")])
+def test_a_prepared_row_without_its_relation_metadata_is_named(tmp_path, change, problem):
+    from check_model.prepare import read_split
+
+    row = dict(VALID_ROW)
+    for key, value in change.items():
+        if value is None:
+            row.pop(key)
+        else:
+            row[key] = value
+    (tmp_path / "val.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"val\.jsonl:1: not a prepared row \(" + re.escape(problem)):
+        read_split(tmp_path, "val")
+
+
+def test_repeated_ids_are_refused_within_and_across_splits(tmp_path):
+    from check_model.prepare import duplicate_ids, read_split
+
+    (tmp_path / "val.jsonl").write_text((json.dumps(VALID_ROW) + "\n") * 2, encoding="utf-8")
+    with pytest.raises(ValueError, match=r"val\.jsonl:2: not a prepared row \(duplicate id 'r1' \(also at line 1\)"):
+        read_split(tmp_path, "val")
+    assert duplicate_ids({"train": [{"id": "r1"}], "val": [{"id": "r1"}, {"id": "r2"}], "test": []}) == ["r1"]
+
+
+def test_reference_labels_are_checked_against_the_run_catalog(tmp_path, catalog):
+    from check_model.prepare import read_split
+
+    fireball = {"kind": "spell", "name": "Fireball", "difficulty": "impossible"}
+    row = {**VALID_ROW, "reference": {"roll_required": True, "options": [[fireball]]}}
+    (tmp_path / "val.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    assert read_split(tmp_path, "val")  # without a catalog only the shape is checked
+    with pytest.raises(ValueError, match=r"val\.jsonl:1: not a prepared row \(reference label .*kind must be one of"):
+        read_split(tmp_path, "val", catalog)
+
+
+def test_an_edited_system_prompt_is_refused():
+    from check_model.prompt import PROMPT_FORMAT_VERSION, prompt_sha256
+
+    prompt_record = {"format_version": PROMPT_FORMAT_VERSION, "system_prompt": "p", "system_prompt_sha256": prompt_sha256("p")}
+    check_format({"prompt": prompt_record})
+    with pytest.raises(ValueError, match="does not match its recorded SHA-256"):
+        check_format({"prompt": {**prompt_record, "system_prompt": "p, edited"}})
+
+
+@pytest.mark.parametrize("content, problem", [
+    ('{"sources": [', "is unreadable"), ('{"sources": [{"path": "a"}], "split_config": {}}', "is not a provenance record"),
+    ("[]", "is not a provenance record")])
+def test_a_damaged_provenance_file_is_a_refusal(tmp_path, content, problem):
+    from check_model.__main__ import _data_mismatch
+
+    (tmp_path / "splits_provenance.json").write_text(content, encoding="utf-8")
+    config = {"data": {"prepared_dir": str(tmp_path)}}
+    assert problem in _data_mismatch(config, {"config": {"data": {"sources": []}}, "prompt": {"language": "en"}})

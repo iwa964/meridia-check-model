@@ -85,15 +85,36 @@ def _run_config(args) -> dict:
     return manifest["config"]
 
 
+def _read_provenance(prepared: Path) -> tuple[dict | None, str | None]:
+    """(provenance, None), or (None, why it cannot be used). An interrupted prepare can leave the
+    file truncated; that is a refusal like any other mismatch, not a traceback."""
+    from . import strictjson
+    from .prepare import PROVENANCE
+
+    path = prepared / PROVENANCE
+    if not path.exists():
+        return None, f"{prepared} has no {PROVENANCE}; re-run prepare"
+    try:
+        data = strictjson.loads(path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        return None, f"{path} is unreadable ({exc}); re-run prepare"
+    sources = data.get("sources") if isinstance(data, dict) else None
+    if not (isinstance(sources, list) and isinstance(data.get("split_config"), dict)
+            and all(isinstance(s, dict) and isinstance(s.get("path"), str) and isinstance(s.get("sha256"), str)
+                    for s in sources)):
+        return None, f"{path} is not a provenance record (sources with path and sha256, split_config); re-run prepare"
+    return data, None
+
+
 def _data_mismatch(config: dict, manifest: dict, rows: list[dict] | None = None) -> str | None:
     """Why the prepared data is not the data this run was trained on, or None. Scoring a run on
     another experiment's prepared files would still print plausible metrics."""
     from .prepare import PROVENANCE, SPLIT_KEYS
 
     prepared = Path(config["data"]["prepared_dir"])
-    if not (prepared / PROVENANCE).exists():
-        return f"{prepared} has no {PROVENANCE}; re-run prepare"
-    provenance = json.loads((prepared / PROVENANCE).read_text(encoding="utf-8"))
+    provenance, problem = _read_provenance(prepared)
+    if problem:
+        return problem
     have = [s["path"] for s in provenance["sources"]]
     want = list(manifest["config"]["data"]["sources"])
     if have != want:
@@ -127,9 +148,9 @@ def _short(sha256: str | None, missing: str = "no recorded hash") -> str:
 def _changed_sources(config: dict, manifest: dict) -> list[dict]:
     """Sources whose content differs from what the run was trained on (SHA-256, not path: a file
     edited in place keeps its path). Empty when the prepared data is the training revision."""
-    from .prepare import PROVENANCE
-
-    provenance = json.loads((Path(config["data"]["prepared_dir"]) / PROVENANCE).read_text(encoding="utf-8"))
+    provenance, problem = _read_provenance(Path(config["data"]["prepared_dir"]))
+    if problem:  # _data_mismatch, run first, has already refused this
+        raise ValueError(problem)
     trained = {s["path"]: s.get("sha256") for s in manifest["examples"].get("source_files", [])}
     return [{"path": s["path"], "trained_sha256": trained.get(s["path"]), "prepared_sha256": s["sha256"]}
             for s in provenance["sources"] if trained.get(s["path"]) != s["sha256"]]
@@ -184,8 +205,9 @@ class _LazyModel:
 def cmd_evaluate(args) -> None:
     _require_training_stack()
     from .evaluate import evaluate_rows, training_relatives
+    from .catalog import load_catalog
     from .infer import check_format
-    from .prepare import read_split
+    from .prepare import duplicate_ids, read_split
 
     config = _run_config(args)
     # Every refusal below needs only the manifest and file hashes: checking them before the model
@@ -206,10 +228,14 @@ def cmd_evaluate(args) -> None:
         sys.exit(f"refusing to evaluate: the prepared data is not the revision the run was trained on ({listed}). "
                  "Pass --allow-data-change to score it anyway; trained rows stay excluded and the metrics "
                  "record the change.")
+    catalog = load_catalog(Path(args.run) / "catalog.json")  # the labels this run can answer with
     try:
-        splits = {s: read_split(config["data"]["prepared_dir"], s) for s in ("train", "val", "test")}
+        splits = {s: read_split(config["data"]["prepared_dir"], s, catalog) for s in ("train", "val", "test")}
     except (ValueError, FileNotFoundError) as exc:
         sys.exit(f"refusing to evaluate: {exc}")
+    repeated = duplicate_ids(splits)
+    if repeated:
+        sys.exit(f"refusing to evaluate: ids in more than one split file: {repeated}; re-run prepare")
     rows = splits[args.split]
     mismatch = _data_mismatch(config, manifest, rows)  # now with the rows' language
     if mismatch:
