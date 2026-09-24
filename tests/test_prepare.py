@@ -313,3 +313,41 @@ def test_predict_loads_no_model_when_no_query_can_run(tmp_path, monkeypatch, cap
     main(["predict", "--run", str(run), "--config", str(config), "--input", str(source)])
     results = json.loads(capsys.readouterr().out)
     assert all(not r["valid"] and r["errors"][0].startswith("bad query: ") for r in results)
+
+
+@pytest.mark.parametrize("reference, problem", [
+    ({"roll_required": True, "options": []}, "a roll-required reference needs options of 1 to 1 check(s)"),
+    ({"roll_required": True, "options": [[]]}, "a roll-required reference needs options of 1 to 1 check(s)"),
+    ({"roll_required": False, "options": [[{"kind": "skill", "name": "Climbing", "difficulty": "hard"}]]},
+     "a no-roll reference cannot hold checks")])
+def test_a_contradictory_prepared_reference_is_named(tmp_path, reference, problem):
+    from check_model.prepare import read_split
+
+    (tmp_path / "val.jsonl").write_text(json.dumps({**VALID_ROW, "reference": reference}) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"val\.jsonl:1: not a prepared row \(" + re.escape(problem)):
+        read_split(tmp_path, "val")
+
+
+def test_a_prepared_input_that_is_not_a_query_is_named(tmp_path):
+    from check_model.prepare import read_split
+
+    (tmp_path / "val.jsonl").write_text(json.dumps({**VALID_ROW, "input": {}}) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"val\.jsonl:1: not a prepared row \(input: scene must be a non-empty string"):
+        read_split(tmp_path, "val")
+
+
+def test_every_row_prepare_writes_passes_read_split(tmp_path, subset, write_source):
+    from helpers import clone
+
+    from check_model.prepare import read_split
+
+    # Plus a plain no-roll label (000040's without its optional-roll part): its reference is the
+    # {roll_required: false, options: [[]]} form, which neither the fixture nor the dataset has yet.
+    no_roll = clone(subset, "dice_train_000040", "dice_train_000940")
+    no_roll["scene"]["en"] = "A variation. " + no_roll["scene"]["en"]
+    for key in ("roll_optional", "optional_roll"):
+        no_roll["annotation"].pop(key)
+    subset["examples"].append(no_roll)
+    main(["prepare", "--config", config_file(tmp_path, write_source(subset), val_fraction=0.5)])
+    rows = [r for s in ("train", "val", "test") for r in read_split(tmp_path / "prepared", s)]
+    assert {r["id"]: r["reference"] for r in rows}["dice_train_000940"] == {"roll_required": False, "options": [[]]}

@@ -12,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from . import prompt
 from .adapter import Report, Row, load_rows
 from .catalog import load_catalog
 from .splits import assign_splits
@@ -111,6 +112,13 @@ def _reference_problem(reference: dict) -> str | None:
             if not (isinstance(check, dict)
                     and all(isinstance(check.get(k), str) for k in ("kind", "name", "difficulty"))):
                 return "each reference check needs string kind, name and difficulty"
+    # What the adapter writes: a roll-required reference has options of 1..MAX_CHECKS checks, a
+    # no-roll one only empty options. Anything else would be scored wrong whatever the model says.
+    if reference["roll_required"]:
+        if not options or not all(1 <= len(o) <= prompt.MAX_CHECKS for o in options):
+            return f"a roll-required reference needs options of 1 to {prompt.MAX_CHECKS} check(s)"
+    elif any(options):
+        return "a no-roll reference cannot hold checks"
     return None
 
 
@@ -121,6 +129,10 @@ def _row_problem(row: dict) -> str | None:
     wrong = [k for k, kind in ROW_FIELDS.items() if not isinstance(row[k], kind)]
     if wrong:
         return f"wrong type for {wrong}"
+    # The same check predict applies: a damaged input would otherwise be scored as a wrong answer.
+    query_problems = prompt.query_errors(row["input"])
+    if query_problems:
+        return "input: " + "; ".join(query_problems)
     return _reference_problem(row["reference"])
 
 
