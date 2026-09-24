@@ -24,6 +24,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import strictjson
+
 SKILL_BANK_PATH = "Scripts/profile/skill/SkillBank.gd"
 CHECK_TURN_PATH = "server/check_turn.py"
 MERIDIA_REPOSITORY = "iwa964/MeridiaGame"
@@ -96,9 +98,38 @@ def load_catalog(path: str | Path) -> Catalog:
     return parse_catalog(Path(path).read_bytes())
 
 
+_CATALOG_KEYS = ("source", "kinds", "difficulties", "attributes", "skills")
+
+
+def _catalog_problem(data) -> str | None:
+    """Why decoded catalog JSON is not a catalog, or None."""
+    if not isinstance(data, dict) or set(data) != set(_CATALOG_KEYS):
+        got = sorted(data) if isinstance(data, dict) else type(data).__name__
+        return f"expected an object with exactly the keys {list(_CATALOG_KEYS)}, got {got}"
+    for key in ("kinds", "difficulties", "attributes"):
+        if not (isinstance(data[key], list) and data[key]
+                and all(isinstance(v, str) and v.strip() for v in data[key])):
+            return f"{key} must be a non-empty list of names"
+    if not (isinstance(data["skills"], list) and data["skills"]
+            and all(isinstance(r, dict) and isinstance(r.get("name"), str) and r["name"].strip()
+                    and isinstance(r.get("initial"), str) for r in data["skills"])):
+        return "skills must be a non-empty list of rows, each with a name and an initial (strings)"
+    source = data["source"]
+    if not (isinstance(source, dict)
+            and all(isinstance(source.get(k), dict) and isinstance(source[k].get("blob_sha"), str)
+                    for k in ("skill_catalog", "attribute_catalog"))):
+        return "source must record skill_catalog.blob_sha and attribute_catalog.blob_sha"
+    return None
+
+
 def parse_catalog(raw: bytes) -> Catalog:
-    """A catalog from the bytes of its JSON file, so a caller can hash exactly what it parses."""
-    data = json.loads(raw.decode("utf-8"))
+    """A catalog from the bytes of its JSON file, so a caller can hash exactly what it parses.
+    Strict: a repeated key (two `skills` lists after a merge, where the last would silently win)
+    or a malformed field is a ValueError, not another label set or a KeyError later."""
+    data = strictjson.loads(raw.decode("utf-8"))
+    problem = _catalog_problem(data)
+    if problem:
+        raise ValueError(f"not a catalog: {problem}")
     return Catalog(
         skills=tuple(data["skills"]),
         attributes=tuple(data["attributes"]),

@@ -160,7 +160,9 @@ python -m check_model predict --run runs/<run> --input query.json   # one object
 ```
 
 The query needs `scene`, exactly one of `player_action` / `observed_event`, and optionally a
-`runtime_state` object. Any other field is rejected.
+`runtime_state` object. Any other field is rejected. `runtime_state` must be plain, finite JSON
+data nested at most `prompt.MAX_JSON_DEPTH` (100) levels deep; a Python caller's set, NaN or
+self-containing object is reported as a bad query.
 
 **Output.** The model replies with one JSON object:
 

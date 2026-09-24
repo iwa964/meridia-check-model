@@ -109,28 +109,44 @@ def target_text(decision: dict) -> str:
     return json.dumps({"roll_required": decision["roll_required"], "checks": checks}, ensure_ascii=False)
 
 
-def _json_problem(value: Any, where: str) -> str | None:
-    """Why `value` is not plain, finite JSON data, or None. A Python caller can pass a set or a
-    NaN, which json.dumps would reject or write as the non-JSON token NaN into the prompt."""
+#: Deepest nesting of objects and lists accepted in runtime_state. Well inside what json.dumps
+#: can write before the interpreter's recursion limit (about 1000), so a query that passes
+#: validation always renders into a prompt.
+MAX_JSON_DEPTH = 100
+
+
+def _json_problem(value: Any, where: str, _open: set | None = None) -> str | None:
+    """Why `value` is not plain, finite JSON data, or None. A Python caller can pass a set, a
+    NaN or a container that holds itself, which json.dumps would reject, crash on, or write as
+    the non-JSON token NaN into the prompt. `_open` holds the containers on the current path."""
     if value is None or isinstance(value, (bool, str, int)):
         return None
     if isinstance(value, float):
         return None if math.isfinite(value) else f"{where} is {value!r}, not a finite number"
-    if isinstance(value, list):
-        for i, item in enumerate(value):
-            problem = _json_problem(item, f"{where}[{i}]")
-            if problem:
-                return problem
-        return None
-    if isinstance(value, dict):
+    if not isinstance(value, (list, dict)):
+        return f"{where} holds a {type(value).__name__}, which is not JSON"
+    _open = set() if _open is None else _open
+    if id(value) in _open:
+        return f"{where} contains itself (a cycle), which is not JSON"
+    if len(_open) >= MAX_JSON_DEPTH:
+        return f"{where} is nested more than {MAX_JSON_DEPTH} levels deep"
+    _open.add(id(value))
+    try:
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                problem = _json_problem(item, f"{where}[{i}]", _open)
+                if problem:
+                    return problem
+            return None
         for key, item in value.items():
             if not isinstance(key, str):
                 return f"{where} has a non-string key {key!r}"
-            problem = _json_problem(item, f"{where}.{key}")
+            problem = _json_problem(item, f"{where}.{key}", _open)
             if problem:
                 return problem
         return None
-    return f"{where} holds a {type(value).__name__}, which is not JSON"
+    finally:
+        _open.discard(id(value))  # the same object twice as siblings is not a cycle
 
 
 def query_errors(query: Any) -> list[str]:

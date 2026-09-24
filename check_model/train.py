@@ -255,18 +255,23 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
     if catalog is None:
         catalog = load_catalog(config["data"]["catalog"])
     system = prompt.system_prompt(catalog)
+    # A local base is hashed before its tokenizer and weights load, and again after: the manifest
+    # pins the bytes training read only if the directory held still in between.
+    base_sha256 = local_base_sha256(model_cfg["base_model"])
     tokenizer = load_tokenizer(model_cfg["base_model"], model_cfg["revision"], model_cfg["trust_remote_code"])
     context = model_context_limit(model_cfg, tokenizer)
     train_set, train_stats = encode_all(tokenizer, system, train_rows, train_cfg["max_seq_length"], context)
     val_trainable = [r for r in val_rows if r.get("target") is not None]
     val_set, val_stats = encode_all(tokenizer, system, val_trainable, train_cfg["max_seq_length"], context)
 
-    base_sha256 = local_base_sha256(model_cfg["base_model"])  # the content loaded next
     model = AutoModelForCausalLM.from_pretrained(
         model_cfg["base_model"], revision=model_cfg["revision"],
         trust_remote_code=model_cfg["trust_remote_code"],
         dtype=getattr(torch, load_dtype(precision, lora_cfg["enabled"])),
     )
+    if local_base_sha256(model_cfg["base_model"]) != base_sha256:
+        raise ValueError(f"base model directory {model_cfg['base_model']} changed while it was being loaded; "
+                         "the recorded digest would not describe the weights trained on. Train again")
     if train_cfg["gradient_checkpointing"]:
         model.gradient_checkpointing_enable()
         model.enable_input_require_grads()

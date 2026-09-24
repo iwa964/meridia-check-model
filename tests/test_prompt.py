@@ -116,3 +116,38 @@ def test_duplicate_key_detection_is_linear():
     assert time.perf_counter() - started < 2.0  # keys.count() per key took ~10 s here
     with pytest.raises(ValueError, match=r"duplicate key\(s\) \['a', 'b'\]"):
         strictjson.loads('{"b": 1, "a": 1, "b": 2, "a": 2}')
+
+
+def _nested(depth: int) -> dict:
+    state = {}
+    for _ in range(depth - 1):
+        state = {"x": state}
+    return state
+
+
+def test_runtime_state_that_contains_itself_is_refused():
+    state = {"hp": 3}
+    state["self"] = state
+    assert prompt.query_errors({"scene": "s", "player_action": "a", "runtime_state": state}) == [
+        "runtime_state.self contains itself (a cycle), which is not JSON"]
+    shared = {"hp": 3}  # the same object twice, side by side, is not a cycle
+    assert prompt.query_errors({"scene": "s", "player_action": "a",
+                                "runtime_state": {"a": shared, "b": [shared, shared]}}) == []
+
+
+def test_runtime_state_nesting_is_bounded():
+    ok = {"scene": "s", "player_action": "a", "runtime_state": _nested(prompt.MAX_JSON_DEPTH)}
+    assert prompt.query_errors(ok) == []
+    assert prompt.user_message(ok)  # what passes validation renders
+    deep = {"scene": "s", "player_action": "a", "runtime_state": _nested(prompt.MAX_JSON_DEPTH + 1)}
+    (problem,) = prompt.query_errors(deep)
+    assert problem.endswith(f"is nested more than {prompt.MAX_JSON_DEPTH} levels deep")
+    far = {"scene": "s", "player_action": "a", "runtime_state": _nested(5000)}
+    assert prompt.query_errors(far) == [problem]  # refused, not a RecursionError
+
+
+def test_json_nested_past_the_recursion_limit_is_a_value_error():
+    from check_model import strictjson
+
+    with pytest.raises(ValueError, match="nested too deeply"):
+        strictjson.loads('{"a":' * 5000 + "1" + "}" * 5000)

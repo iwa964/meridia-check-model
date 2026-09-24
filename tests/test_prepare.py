@@ -256,6 +256,16 @@ def test_predict_refuses_a_query_with_a_repeated_key(tmp_path):
         main(["predict", "--run", str(tmp_path / "no-run"), "--config", str(config), "--input", str(source)])
 
 
+def test_predict_refuses_input_nested_past_the_recursion_limit(tmp_path):
+    source = tmp_path / "queries.json"
+    source.write_text('{"scene": "A cliff.", "player_action": "I climb.", "runtime_state": '
+                      + '{"a":' * 5000 + "1" + "}" * 5000 + "}", encoding="utf-8")
+    config = tmp_path / "empty.yaml"
+    config.write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit, match="not valid JSON .*nested too deeply"):
+        main(["predict", "--run", str(tmp_path / "no-run"), "--config", str(config), "--input", str(source)])
+
+
 @pytest.mark.parametrize("section, key", [("lora", "target_modules"), ("model", "base_model"), ("data", "prepared_dir")])
 def test_a_blank_string_setting_is_refused(tmp_path, section, key):
     path = tmp_path / "config.yaml"
@@ -508,4 +518,25 @@ def test_prepare_refuses_a_catalog_the_prompt_cannot_describe(tmp_path, change, 
         build(load_config(cfg))
     with pytest.raises(SystemExit, match=f"data.catalog {re.escape(str(path))}: .*{problem}"):
         main(["prepare", "--config", cfg])
+    assert not (tmp_path / "prepared" / "train.jsonl").exists()
+
+
+@pytest.mark.parametrize("edit, problem", [
+    (lambda text: text.replace('"skills": [', '"skills": [], "skills": [', 1), r"duplicate key\(s\) \['skills'\]"),
+    (lambda text: text.replace('"attributes"', '"attribute"', 1), "not a catalog: expected an object with exactly the keys"),
+    (lambda text: text.replace('"initial"', '"initial_value"', 1), "not a catalog: skills must be"),
+    (lambda text: text.replace('"blob_sha"', '"sha"', 1), "not a catalog: source must record"),
+])
+def test_prepare_refuses_an_ambiguous_or_malformed_catalog(tmp_path, edit, problem):
+    from check_model.catalog import load_catalog
+
+    text = (ROOT / "catalog" / "meridia_catalog.json").read_text(encoding="utf-8")
+    edited = edit(text)
+    assert edited != text
+    path = tmp_path / "catalog.json"
+    path.write_text(edited, encoding="utf-8")
+    with pytest.raises(ValueError, match=problem):
+        load_catalog(path)
+    with pytest.raises(SystemExit, match=f"data.catalog {re.escape(str(path))}: .*{problem}"):
+        main(["prepare", "--config", config_file(tmp_path, SUBSET, catalog=str(path))])
     assert not (tmp_path / "prepared" / "train.jsonl").exists()

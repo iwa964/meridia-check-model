@@ -125,9 +125,16 @@ class CheckModel:
         check_format(self.manifest)
         self.system = self.manifest["prompt"]["system_prompt"]
         self.catalog = load_run_catalog(self.run_dir, self.manifest)
-        check_model_files(self.run_dir, self.manifest)
         model_dir = self.run_dir / "model"
         base = self.manifest["base_model"]
+        source = base_source(base, self.run_dir)
+
+        def verify() -> None:
+            check_model_files(self.run_dir, self.manifest)
+            if self.manifest["adapter"] == "lora":
+                check_local_base(base, source)
+
+        verify()  # before loading: a changed run fails without a download or an allocation
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         dtype = serving_dtype(self.manifest["precision"], self.device)
 
@@ -136,8 +143,6 @@ class CheckModel:
         if self.manifest["adapter"] == "lora":
             from peft import PeftModel
 
-            source = base_source(base, self.run_dir)
-            check_local_base(base, source)
             model = AutoModelForCausalLM.from_pretrained(
                 source, revision=base_revision(base), dtype=dtype,
                 trust_remote_code=base["trust_remote_code"])
@@ -145,6 +150,7 @@ class CheckModel:
         else:
             model = AutoModelForCausalLM.from_pretrained(model_dir, dtype=dtype,
                                                          trust_remote_code=base["trust_remote_code"])
+        verify()  # and after: the files were not replaced while they were being read
         self.model = model.to(self.device).eval()
         # Greedy, and nothing else from the base model's generation_config: instruct models
         # ship sampling settings and a repetition penalty, which would bend a JSON answer.

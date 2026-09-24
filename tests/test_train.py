@@ -643,3 +643,49 @@ def test_a_run_is_served_only_with_the_model_files_it_saved(tiny, tmp_path):
     (run / "model" / "tokenizer_config.json").unlink()
     with pytest.raises(ValueError, match=r"\['tokenizer_config.json'\] differ"):
         CheckModel(run, max_new_tokens=4)
+
+
+def _change_during_load(monkeypatch, base: Path):
+    """Make the next base-weights load find the directory edited mid-read."""
+    import transformers
+
+    real = transformers.AutoModelForCausalLM.from_pretrained.__func__
+
+    def load_then_edit(cls, *args, **kwargs):
+        model = real(cls, *args, **kwargs)
+        if Path(args[0]) == base:
+            (base / "NOTES.md").write_text("replaced during the load\n", encoding="utf-8")
+        return model
+
+    monkeypatch.setattr(transformers.AutoModelForCausalLM, "from_pretrained", classmethod(load_then_edit))
+
+
+def test_training_refuses_a_local_base_that_changes_while_it_loads(tiny, tmp_path, monkeypatch):
+    import shutil
+
+    from check_model.train import train
+
+    base = tmp_path / "base"
+    shutil.copytree(tiny["dir"], base)
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(base)
+    _change_during_load(monkeypatch, base)
+    with pytest.raises(ValueError, match="changed while it was being loaded"):
+        train(config, tiny["rows"][:2], [], run_dir=tmp_path / "run", source_files=[], max_steps=1)
+
+
+def test_serving_refuses_a_local_base_that_changes_while_it_loads(tiny, tmp_path, monkeypatch):
+    import shutil
+
+    from check_model.infer import CheckModel
+    from check_model.train import train
+
+    base = tmp_path / "base"
+    shutil.copytree(tiny["dir"], base)
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(base)
+    run = tmp_path / "run"
+    train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
+    _change_during_load(monkeypatch, base)
+    with pytest.raises(ValueError, match="changed since training"):
+        CheckModel(run, max_new_tokens=4)

@@ -36,7 +36,12 @@ def _finite_float(token: str) -> float:
 
 
 def loads(text: str) -> Any:
-    """json.loads, raising ValueError on a repeated key, a NaN / Infinity constant, or a number
-    too large for a finite float."""
-    return json.loads(text, object_pairs_hook=_unique, parse_constant=_no_constant,
-                      parse_float=_finite_float)
+    """json.loads, raising ValueError on a repeated key, a NaN / Infinity constant, a number
+    too large for a finite float, or nesting deeper than the decoder can follow."""
+    try:
+        return json.loads(text, object_pairs_hook=_unique, parse_constant=_no_constant,
+                          parse_float=_finite_float)
+    except RecursionError:
+        # A few thousand nested brackets exhaust the interpreter's recursion limit. That is bad
+        # input like any other, not an exception past every caller's ValueError handler.
+        raise ValueError("nested too deeply to decode") from None
