@@ -110,7 +110,7 @@ Each run gets its own directory `runs/<run_name>-<timestamp>-<random>/`, never s
 - `model/` — the LoRA adapter, tokenizer and chat template
 - `catalog.json` — the label catalog the run was trained on
 - `train_log.jsonl` — the Trainer's log history (loss, learning rate, final `eval_loss` on validation)
-- `run_manifest.json` — the base model (name, pinned revision, resolved hub commit), the full config, the system prompt and its hash, the source files' SHA-256 and the prepared split files' SHA-256, every train and val example id, token-length stats, library versions and the repo commit
+- `run_manifest.json` — the base model (name, pinned revision, resolved hub commit; for a local directory, the SHA-256 of its content, which a LoRA run must still match when it is served), the full config, the system prompt and its hash, the source files' SHA-256 and the prepared split files' SHA-256, every train and val example id, token-length stats, library versions and the repo commit
 
 How the training is set up:
 

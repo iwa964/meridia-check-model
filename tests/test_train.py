@@ -398,3 +398,42 @@ def test_the_manifest_records_every_training_scenario_member(tiny, tmp_path):
     train(config, rows, [], run_dir=tmp_path / "run", source_files=[], max_steps=1)
     saved = json.loads((tmp_path / "run" / "run_manifest.json").read_text())
     assert saved["examples"]["train_scenario_ids"] == sorted({r["id"] for r in rows} | {"dice_train_000029"})
+
+
+def test_a_bad_scheduler_is_refused_before_anything_loads(tiny, tmp_path, monkeypatch):
+    import check_model.train as train_module
+
+    def no_download(*args, **kwargs):
+        raise AssertionError("the tokenizer was loaded before the training arguments were checked")
+
+    monkeypatch.setattr(train_module, "load_tokenizer", no_download)
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(tiny["dir"])
+    config["train"]["lr_scheduler_type"] = "cosnie"
+    run = tmp_path / "run"
+    with pytest.raises(ValueError, match="cosnie"):
+        train_module.train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
+    assert not run.exists()  # a refused config leaves no run directory behind
+
+
+def test_a_lora_run_is_served_only_on_the_local_base_it_was_trained_on(tiny, tmp_path):
+    import shutil
+
+    from check_model.infer import CheckModel
+    from check_model.train import train
+
+    base = tmp_path / "base"
+    shutil.copytree(tiny["dir"], base)
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(base)
+    run = tmp_path / "run"
+    train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
+    assert json.loads((run / "run_manifest.json").read_text())["base_model"]["local_sha256"]
+    CheckModel(run, max_new_tokens=4)  # unchanged: loads
+
+    (base / "NOTES.md").write_text("edited after training\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="changed since training"):
+        CheckModel(run, max_new_tokens=4)
+    shutil.rmtree(base)
+    with pytest.raises(FileNotFoundError, match="is gone"):
+        CheckModel(run, max_new_tokens=4)

@@ -19,6 +19,12 @@ def _unique(pairs: list[tuple[str, Any]]) -> dict:
     return dict(pairs)
 
 
+def _no_constant(name: str) -> Any:
+    # json.loads accepts NaN and Infinity by default; they are not JSON, and json.dumps would
+    # write them straight back into a prompt.
+    raise ValueError(f"{name} is not valid JSON")
+
+
 def loads(text: str) -> Any:
-    """json.loads, raising ValueError on a repeated key."""
-    return json.loads(text, object_pairs_hook=_unique)
+    """json.loads, raising ValueError on a repeated key or a NaN / Infinity constant."""
+    return json.loads(text, object_pairs_hook=_unique, parse_constant=_no_constant)

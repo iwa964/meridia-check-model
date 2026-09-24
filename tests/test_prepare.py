@@ -250,3 +250,12 @@ def test_a_blank_string_setting_is_refused(tmp_path, section, key):
     path.write_text(yaml.safe_dump({section: {key: "  "}}), encoding="utf-8")
     with pytest.raises(ValueError, match=f"'{section}.{key}' must not be blank"):
         load_config(path)
+
+
+@pytest.mark.parametrize("line", ["null", '"a string"', "[1, 2]"])
+def test_a_prepared_line_that_is_not_an_object_is_named(tmp_path, line):
+    from check_model.prepare import read_split
+
+    (tmp_path / "val.jsonl").write_text(json.dumps({"id": "r1"}) + "\n" + line + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"val\.jsonl:2: not a prepared row \(a JSON object is required"):
+        read_split(tmp_path, "val")

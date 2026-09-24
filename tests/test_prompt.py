@@ -74,3 +74,13 @@ def test_user_message_keeps_unicode():
 def test_a_reply_with_a_repeated_key_is_not_a_decision(catalog, reply):
     decision, errors = prompt.parse_decision(reply, catalog)
     assert decision is None and "duplicate key(s)" in errors[0]
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+def test_non_standard_json_constants_are_refused(catalog, constant):
+    from check_model import strictjson
+
+    with pytest.raises(ValueError, match=f"{constant} is not valid JSON"):
+        strictjson.loads('{"scene": "s", "runtime_state": {"hp": %s}}' % constant)
+    decision, errors = prompt.parse_decision('{"roll_required": %s, "checks": []}' % constant, catalog)
+    assert decision is None and "not valid JSON" in errors[0]

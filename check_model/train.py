@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import platform
 import subprocess
@@ -163,6 +164,23 @@ def load_tokenizer(name_or_path: str, revision: str | None, trust_remote_code: b
     return tokenizer
 
 
+def local_base_sha256(name_or_path: str) -> str | None:
+    """SHA-256 over every file (relative path and content) of a local base-model directory, or
+    None for a hub name, which the recorded revision pins instead. A LoRA run stores only its
+    adapter, so this is what says the base it is served on is the one it was trained on."""
+    root = Path(name_or_path)
+    if not root.is_dir():
+        return None
+    digest = hashlib.sha256()
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        digest.update(path.relative_to(root).as_posix().encode("utf-8") + b"\0")
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir: str | Path,
           source_files: list[dict], max_steps: int | None = None, mode: str = "train",
           split_sha256: dict | None = None, run_dir_created: bool = False) -> dict:
@@ -175,34 +193,10 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
 
     model_cfg, lora_cfg, train_cfg = config["model"], config["lora"], config["train"]
     run_dir = Path(run_dir)
-    # Two runs never write into one directory: created here exclusively, or already created
-    # exclusively by the caller for this run (smoke --tiny puts its base model inside it).
-    run_dir.mkdir(parents=True, exist_ok=run_dir_created)
-    transformers.set_seed(config["seed"])
-
-    catalog = load_catalog(config["data"]["catalog"])
-    system = prompt.system_prompt(catalog)
-    tokenizer = load_tokenizer(model_cfg["base_model"], model_cfg["revision"], model_cfg["trust_remote_code"])
-    context = model_context_limit(model_cfg, tokenizer)
-    train_set, train_stats = encode_all(tokenizer, system, train_rows, train_cfg["max_seq_length"], context)
-    val_trainable = [r for r in val_rows if r.get("target") is not None]
-    val_set, val_stats = encode_all(tokenizer, system, val_trainable, train_cfg["max_seq_length"], context)
-
+    # Settings that TrainingArguments validates (a scheduler name, precision on this device) fail
+    # here: before the run directory exists, and before a tokenizer or a multi-gigabyte base
+    # model is downloaded and loaded.
     precision = resolve_precision(train_cfg["precision"])
-    model = AutoModelForCausalLM.from_pretrained(
-        model_cfg["base_model"], revision=model_cfg["revision"],
-        trust_remote_code=model_cfg["trust_remote_code"],
-        dtype=getattr(torch, load_dtype(precision, lora_cfg["enabled"])),
-    )
-    if train_cfg["gradient_checkpointing"]:
-        model.gradient_checkpointing_enable()
-        model.enable_input_require_grads()
-    if lora_cfg["enabled"]:
-        model = peft.get_peft_model(model, peft.LoraConfig(
-            task_type="CAUSAL_LM", r=lora_cfg["r"], lora_alpha=lora_cfg["alpha"],
-            lora_dropout=lora_cfg["dropout"], target_modules=lora_cfg["target_modules"],
-        ))
-
     steps = max_steps if max_steps is not None else train_cfg["max_steps"]
     args = TrainingArguments(
         output_dir=str(run_dir / "trainer"),
@@ -225,6 +219,34 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
         fp16=precision == "fp16",
         remove_unused_columns=False,
     )
+    # Two runs never write into one directory: created here exclusively, or already created
+    # exclusively by the caller for this run (smoke --tiny puts its base model inside it).
+    run_dir.mkdir(parents=True, exist_ok=run_dir_created)
+    transformers.set_seed(config["seed"])
+
+    catalog = load_catalog(config["data"]["catalog"])
+    system = prompt.system_prompt(catalog)
+    tokenizer = load_tokenizer(model_cfg["base_model"], model_cfg["revision"], model_cfg["trust_remote_code"])
+    context = model_context_limit(model_cfg, tokenizer)
+    train_set, train_stats = encode_all(tokenizer, system, train_rows, train_cfg["max_seq_length"], context)
+    val_trainable = [r for r in val_rows if r.get("target") is not None]
+    val_set, val_stats = encode_all(tokenizer, system, val_trainable, train_cfg["max_seq_length"], context)
+
+    base_sha256 = local_base_sha256(model_cfg["base_model"])  # the content loaded next
+    model = AutoModelForCausalLM.from_pretrained(
+        model_cfg["base_model"], revision=model_cfg["revision"],
+        trust_remote_code=model_cfg["trust_remote_code"],
+        dtype=getattr(torch, load_dtype(precision, lora_cfg["enabled"])),
+    )
+    if train_cfg["gradient_checkpointing"]:
+        model.gradient_checkpointing_enable()
+        model.enable_input_require_grads()
+    if lora_cfg["enabled"]:
+        model = peft.get_peft_model(model, peft.LoraConfig(
+            task_type="CAUSAL_LM", r=lora_cfg["r"], lora_alpha=lora_cfg["alpha"],
+            lora_dropout=lora_cfg["dropout"], target_modules=lora_cfg["target_modules"],
+        ))
+
     trainer = Trainer(model=model, args=args, train_dataset=train_set,
                       data_collator=Collator(tokenizer.pad_token_id))
     started = time.time()
@@ -254,6 +276,7 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
             "name_or_path": model_cfg["base_model"],
             "revision": model_cfg["revision"],
             "resolved_commit": getattr(base_config, "_commit_hash", None),
+            "local_sha256": base_sha256,
             "trust_remote_code": model_cfg["trust_remote_code"],
         },
         "adapter": "lora" if lora_cfg["enabled"] else None,

@@ -103,9 +103,13 @@ def read_split(prepared_dir: str | Path, split: str) -> list[dict]:
     for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
         if line.strip():
             try:
-                rows.append(json.loads(line))
+                row = json.loads(line)
             except ValueError as exc:
                 raise ValueError(f"{path}:{number}: not a prepared row ({exc}); re-run prepare") from None
+            if not isinstance(row, dict):
+                raise ValueError(f"{path}:{number}: not a prepared row (a JSON object is required, got "
+                                 f"{type(row).__name__}); re-run prepare")
+            rows.append(row)
     return rows
 
 

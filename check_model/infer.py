@@ -26,6 +26,23 @@ def base_revision(base: dict) -> str | None:
     return base.get("resolved_commit") or base.get("revision")
 
 
+def check_local_base(base: dict) -> None:
+    """A LoRA run trained on a local base directory is served only on that same content: the run
+    stores the adapter alone, and other weights under the same path would give other answers."""
+    from .train import local_base_sha256
+
+    pinned = base.get("local_sha256")
+    if not pinned:
+        return
+    if not Path(base["name_or_path"]).is_dir():
+        raise FileNotFoundError(f"base model directory {base['name_or_path']} is gone; this LoRA run stores only "
+                                "its adapter and needs the base it was trained on")
+    now = local_base_sha256(base["name_or_path"])
+    if now != pinned:
+        raise ValueError(f"base model directory {base['name_or_path']} changed since training (content "
+                         f"{now[:12]}, trained on {pinned[:12]}); the adapter would run on other weights")
+
+
 def check_format(manifest: dict) -> None:
     got = manifest["prompt"]["format_version"]
     if got != prompt.PROMPT_FORMAT_VERSION:
@@ -74,6 +91,8 @@ class CheckModel:
         self.tokenizer.padding_side = "left"  # decoder-only batch generation
         if self.manifest["adapter"] == "lora":
             from peft import PeftModel
+
+            check_local_base(base)
 
             model = AutoModelForCausalLM.from_pretrained(
                 base["name_or_path"], revision=base_revision(base), dtype=dtype,
