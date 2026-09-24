@@ -74,8 +74,8 @@ run trained on.
 3. If the dataset was labelled against a newer `SkillBank` (a catalog WARNING), refresh the
    snapshot and commit it:
    `python -m check_model sync-catalog --meridia ../MeridiaGame`
-   It refuses a checkout with uncommitted changes to the two catalog sources (the snapshot
-   records `HEAD` as its commit), a difficulty label the prompt has no rule text for
+   It reads both catalog sources from the `HEAD` commit it records, and refuses a checkout with
+   uncommitted changes to them, a difficulty label the prompt has no rule text for
    (`prompt.DIFFICULTY_RULES`, from the game's `Check.threshold`), and a `KINDS` set other than
    the `skill` and `attribute` this code implements. `prepare` applies the same two checks to
    whatever `data.catalog` names, so a hand-edited snapshot is refused before any split is
@@ -113,7 +113,7 @@ Each run gets its own directory `runs/<run_name>-<timestamp>-<random>/`, never s
 - `model/` — the LoRA adapter, tokenizer and chat template
 - `catalog.json` — the label catalog the run was trained on
 - `train_log.jsonl` — the Trainer's log history (loss, learning rate, final `eval_loss` on validation)
-- `run_manifest.json` — the base model (name, pinned revision, resolved hub commit; for a local directory, the SHA-256 of its content, which a LoRA run must still match when it is served), the SHA-256 of every file in `model/` and of `catalog.json` (serving refuses a run whose files no longer match), the full config, the system prompt and its hash, the source files' SHA-256 and the prepared split files' SHA-256, every train and val example id, token-length stats, library versions and the repo commit
+- `run_manifest.json` — the base model (name, pinned revision, resolved hub commit; for a local directory, the SHA-256 of its content, which a LoRA run must still match when it is served), the SHA-256 of every file in `model/` and of `catalog.json` (serving refuses a run whose files no longer match), the full config, the system prompt and its hash, the source files' SHA-256 and the prepared split files' SHA-256, every train and val example id, token-length stats, the metrics (a NaN or infinite one is `null`, its value under `non_finite_metrics`), library versions and the repo commit
 
 How the training is set up:
 

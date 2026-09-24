@@ -190,9 +190,13 @@ def test_each_tiny_smoke_run_keeps_its_own_base(tmp_path, monkeypatch):
     main(["evaluate", "--run", str(run), "--split", "val"])
     manifest_path = run / "run_manifest.json"
     manifest = json.loads(manifest_path.read_text())
-    del manifest["examples"]["split_sha256"]
+    manifest["examples"]["split_sha256"] = {}  # what train() records when given no split hashes
     manifest_path.write_text(json.dumps(manifest))
     with pytest.raises(SystemExit, match="val split: trained on no recorded hash, now [0-9a-f]{12}"):
+        main(["evaluate", "--run", str(run), "--split", "val"])
+    del manifest["examples"]["split_sha256"]
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(SystemExit, match=r"not a run manifest \(examples.split_sha256 is missing\)"):
         main(["evaluate", "--run", str(run), "--split", "val"])
 
     # Each base lives inside its own run, so the run still loads once the regenerable
@@ -689,3 +693,42 @@ def test_serving_refuses_a_local_base_that_changes_while_it_loads(tiny, tmp_path
     _change_during_load(monkeypatch, base)
     with pytest.raises(ValueError, match="changed since training"):
         CheckModel(run, max_new_tokens=4)
+
+
+def test_a_non_finite_metric_still_leaves_a_loadable_manifest(tiny, tmp_path, monkeypatch):
+    import transformers
+
+    from check_model.infer import read_manifest
+    from check_model.train import train
+
+    monkeypatch.setattr(transformers.Trainer, "evaluate", lambda self, **kwargs: {"eval_loss": float("nan")})
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(tiny["dir"])
+    run = tmp_path / "run"
+    train(config, tiny["rows"][:2], tiny["rows"][2:3], run_dir=run, source_files=[], max_steps=1)
+    manifest = read_manifest(run)
+    assert manifest["metrics"]["eval_loss"] is None
+    assert manifest["non_finite_metrics"] == {"eval_loss": "nan"}
+
+
+def test_evaluate_refuses_changed_splits_holding_one_input_twice(tiny, tmp_path):
+    import yaml
+
+    from check_model.__main__ import main
+
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(SUBSET)], "catalog": str(Path(__file__).resolve().parent.parent / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+    val = tmp_path / "prepared" / "val.jsonl"
+    row = json.loads(val.read_text(encoding="utf-8").splitlines()[0])
+    copied = dict(row, id="copied_row", group_members=[*row["group_members"], "copied_row"])
+    with val.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(copied, ensure_ascii=False) + "\n")
+    with pytest.raises(SystemExit, match=rf"rows with the same input under different ids: \[\['{row['id']}', 'copied_row'\]\]"):
+        main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])

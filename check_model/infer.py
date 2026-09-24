@@ -19,13 +19,78 @@ from . import prompt, strictjson
 from .catalog import Catalog, parse_catalog
 
 
+def _is_str_list(v) -> bool:
+    return isinstance(v, list) and all(isinstance(i, str) for i in v)
+
+
+def _is_str_map(v) -> bool:
+    return isinstance(v, dict) and all(isinstance(i, str) for i in v.values())
+
+
+def _is_opt_str(v) -> bool:
+    return v is None or isinstance(v, str)
+
+
+#: Every manifest field serving and evaluation read, and what it must hold.
+_MANIFEST_FIELDS = {
+    "precision": lambda v: isinstance(v, str),
+    "adapter": lambda v: v in ("lora", None),
+    "catalog_sha256": lambda v: isinstance(v, str),
+    "model_files": _is_str_map,
+    "global_steps": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "metrics": lambda v: isinstance(v, dict),
+    "prompt.format_version": lambda v: isinstance(v, str),
+    "prompt.system_prompt": lambda v: isinstance(v, str),
+    "prompt.system_prompt_sha256": lambda v: isinstance(v, str),
+    "prompt.language": lambda v: isinstance(v, str),
+    "base_model.name_or_path": lambda v: isinstance(v, str),
+    "base_model.revision": _is_opt_str,
+    "base_model.resolved_commit": _is_opt_str,
+    "base_model.local_sha256": _is_opt_str,
+    "base_model.in_run": _is_opt_str,
+    "base_model.trust_remote_code": lambda v: isinstance(v, bool),
+    "examples.train_ids": _is_str_list,
+    "examples.val_ids": _is_str_list,
+    "examples.train_fingerprints": _is_str_list,
+    "examples.train_texts": _is_str_list,
+    "examples.train_scenario_ids": _is_str_list,
+    "examples.split_sha256": _is_str_map,
+    "examples.train_links": lambda v: isinstance(v, dict) and all(_is_str_list(i) for i in v.values()),
+    "examples.source_files": lambda v: isinstance(v, list) and all(
+        isinstance(s, dict) and isinstance(s.get("path"), str) and isinstance(s.get("sha256"), str) for s in v),
+}
+
+
+def _manifest_problem(data) -> str | None:
+    if not isinstance(data, dict):
+        return "not a JSON object"
+    for key, ok in _MANIFEST_FIELDS.items():
+        value = data
+        for part in key.split("."):
+            if not isinstance(value, dict) or part not in value:
+                return f"{key} is missing"
+            value = value[part]
+        if not ok(value):
+            return f"{key} has the wrong type or value: {value!r:.80}"
+    from .config import check_recorded_config
+
+    try:
+        check_recorded_config(data.get("config"))
+    except ValueError as exc:
+        return f"config: {exc}"
+    return None
+
+
 def read_manifest(run_dir: str | Path) -> dict:
-    """run_manifest.json, decoded strictly: with two `base_model` or `examples` objects (a merge,
-    say) the last would otherwise silently decide which base and which training ids the run has."""
+    """run_manifest.json, decoded strictly -- with two `base_model` or `examples` objects (a merge,
+    say) the last would otherwise silently decide which base and which training ids the run has
+    -- and checked for every field serving and evaluation read, so a damaged manifest is one
+    named refusal instead of a KeyError somewhere later."""
     path = Path(run_dir) / "run_manifest.json"
     data = strictjson.loads(path.read_bytes().decode("utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} is not a run manifest (not a JSON object)")
+    problem = _manifest_problem(data)
+    if problem:
+        raise ValueError(f"{path} is not a run manifest ({problem})")
     return data
 
 

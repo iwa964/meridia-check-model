@@ -307,3 +307,27 @@ def test_a_source_input_that_predict_would_refuse_is_an_error(catalog, subset, w
     rows, report = load(catalog, write_source(subset))
     assert ("dice_train_000021", f"runtime_state.{'x.' * 99}x is nested more than 100 levels deep") in messages(report)
     assert "dice_train_000021" not in {r.id for r in rows}
+
+
+def test_a_source_nested_past_the_decoding_bound_is_an_error(catalog, subset, write_source):
+    from check_model import strictjson
+
+    deep = {}
+    for _ in range(strictjson.MAX_DEPTH + 50):
+        deep = {"x": deep}
+    subset["notes"] = deep  # metadata the recursive link walker would otherwise descend
+    rows, report = load(catalog, write_source(subset))
+    assert [m for _, m in messages(report)] == [f"not valid JSON: nested more than {strictjson.MAX_DEPTH} levels deep"]
+    assert rows == []
+
+
+@pytest.mark.parametrize("sections", [{}, {"examples": [], "pending_examples": []}])
+def test_a_source_with_no_records_is_an_error(catalog, subset, write_source, sections):
+    from check_model.adapter import SECTION_KIND
+
+    for section in SECTION_KIND:
+        subset.pop(section, None)
+    subset.update(sections)
+    rows, report = load(catalog, SUBSET, write_source(subset, "empty.json"))
+    assert [m for i, m in messages(report) if i is None] == [
+        f"no records: every record section ({', '.join(SECTION_KIND)}) is missing or empty"]

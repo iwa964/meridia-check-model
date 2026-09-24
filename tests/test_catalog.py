@@ -113,3 +113,22 @@ def test_sync_refuses_a_kind_this_code_does_not_implement(tmp_path):
 def test_a_reformatted_or_empty_skill_bank_is_refused(text, message):
     with pytest.raises(ValueError, match=message):
         parse_skill_bank(text)
+
+
+def test_sync_reads_both_files_from_the_commit_it_records(tmp_path):
+    import subprocess
+
+    root = fake_meridia(tmp_path / "MeridiaGame")
+    git(root, "init", "-q")
+    git(root, "add", ".")
+    git(root, "commit", "-qm", "catalog")
+    # A working tree that differs from HEAD without git status saying so: what a checkout or an
+    # edit between the status check and the reads looks like to a reader of the working tree.
+    git(root, "update-index", "--assume-unchanged", "Scripts/profile/skill/SkillBank.gd")
+    (root / "Scripts/profile/skill/SkillBank.gd").write_text(SKILL_ROWS.replace('"20"', '"25"'), encoding="utf-8")
+    catalog = sync_from_meridia(root)
+    head_blob = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD:Scripts/profile/skill/SkillBank.gd"],
+                               capture_output=True, text=True, check=True).stdout.strip()
+    assert catalog.source["commit"] == subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                                                      capture_output=True, text=True, check=True).stdout.strip()
+    assert catalog.source["skill_catalog"]["blob_sha"] == head_blob

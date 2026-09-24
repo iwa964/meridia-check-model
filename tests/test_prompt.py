@@ -149,10 +149,27 @@ def test_runtime_state_nesting_is_bounded():
 def test_json_nested_past_the_recursion_limit_is_a_value_error():
     from check_model import strictjson
 
-    with pytest.raises(ValueError, match="nested too deeply"):
+    with pytest.raises(ValueError, match="nested more than 200 levels deep"):
         strictjson.loads('{"a":' * 5000 + "1" + "}" * 5000)
 
 
 def test_a_query_with_non_string_keys_is_a_bad_query_not_a_crash():
     errors = prompt.query_errors({"scene": "s", "player_action": "a", 1: "x", "extra": "y"})
     assert errors == ["query keys must be strings, got [1]", "unknown fields ['extra']"]
+
+
+def test_json_nesting_is_bounded_whatever_the_decoder_allows():
+    from check_model import strictjson
+
+    def nested(depth):
+        return '{"a":' * (depth - 1) + "{}" + "}" * (depth - 1)
+
+    assert strictjson.loads(nested(strictjson.MAX_DEPTH))  # at the bound: accepted
+    # 300 levels decode fine on Python 3.11 too: the limit is this module's, not the decoder's.
+    with pytest.raises(ValueError, match=f"nested more than {strictjson.MAX_DEPTH} levels deep"):
+        strictjson.loads(nested(300))
+    with pytest.raises(ValueError, match=f"nested more than {strictjson.MAX_DEPTH} levels deep"):
+        strictjson.loads("[" * 300 + "]" * 300)
+    # Room for the deepest legitimate document: a source record (3 levels) carrying a
+    # runtime_state at the query bound.
+    assert strictjson.MAX_DEPTH >= 3 + prompt.MAX_JSON_DEPTH

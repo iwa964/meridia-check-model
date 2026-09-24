@@ -358,6 +358,11 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
             if holds_records or section.endswith("_examples") or section == "examples":
                 report.errors.append({"source": source, "id": None, "message":
                                       f"unknown section {section!r}: the adapter does not know how to treat it"})
+        in_source = sum(len(v) for s in SECTION_KIND if isinstance(v := data.get(s), list))
+        if not in_source:
+            # A clean report would otherwise overwrite the last split files with empty ones.
+            report.errors.append({"source": source, "id": None, "message":
+                                  f"no records: every record section ({', '.join(SECTION_KIND)}) is missing or empty"})
         for section, kind in SECTION_KIND.items():
             records = data.get(section, [])
             if not isinstance(records, list):
@@ -407,10 +412,16 @@ def load_rows(sources: list[str], catalog: Catalog, lang: str) -> tuple[list[Row
     return rows, report
 
 
+def input_key(query: dict) -> str:
+    """What makes two inputs the same for the duplicate check: key order, whitespace and case
+    aside. Used by prepare, and by evaluate on split files that may have changed since."""
+    return " ".join(json.dumps(query, ensure_ascii=False, sort_keys=True).split()).lower()
+
+
 def _check_duplicate_inputs(rows: list[Row], report: Report) -> None:
     by_text: dict[str, str] = {}
     for row in rows:
-        key = " ".join(json.dumps(row.input, ensure_ascii=False, sort_keys=True).split()).lower()
+        key = input_key(row.input)
         if key in by_text:
             report.errors.append({"source": row.source, "id": row.id,
                                   "message": f"same input as {by_text[key]}"})

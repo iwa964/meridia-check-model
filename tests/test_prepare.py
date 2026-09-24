@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import record
+from helpers import record, valid_manifest
 
 from check_model.__main__ import main
 from check_model.config import load_config
@@ -262,7 +262,7 @@ def test_predict_refuses_input_nested_past_the_recursion_limit(tmp_path):
                       + '{"a":' * 5000 + "1" + "}" * 5000 + "}", encoding="utf-8")
     config = tmp_path / "empty.yaml"
     config.write_text("", encoding="utf-8")
-    with pytest.raises(SystemExit, match="not valid JSON .*nested too deeply"):
+    with pytest.raises(SystemExit, match="not valid JSON .*nested more than 200 levels deep"):
         main(["predict", "--run", str(tmp_path / "no-run"), "--config", str(config), "--input", str(source)])
 
 
@@ -319,7 +319,6 @@ def test_a_prepared_reference_of_the_wrong_shape_is_named(tmp_path, reference, p
 @pytest.mark.parametrize("payload", ["[]", '[{"scene": ""}, {"player_action": "a"}]'])
 def test_predict_loads_no_model_when_no_query_can_run(tmp_path, monkeypatch, capsys, payload):
     import check_model.infer as infer
-    from check_model.prompt import PROMPT_FORMAT_VERSION, prompt_sha256
 
     def no_model(*args, **kwargs):
         raise AssertionError("the model was loaded for a batch with nothing to generate")
@@ -327,9 +326,7 @@ def test_predict_loads_no_model_when_no_query_can_run(tmp_path, monkeypatch, cap
     monkeypatch.setattr(infer, "CheckModel", no_model)
     run = tmp_path / "run"
     run.mkdir()
-    (run / "run_manifest.json").write_text(json.dumps({"prompt": {
-        "format_version": PROMPT_FORMAT_VERSION, "system_prompt": "p", "system_prompt_sha256": prompt_sha256("p")}}),
-        encoding="utf-8")
+    (run / "run_manifest.json").write_text(json.dumps(valid_manifest()), encoding="utf-8")
     source = tmp_path / "queries.json"
     source.write_text(payload, encoding="utf-8")
     config = tmp_path / "empty.yaml"
@@ -473,14 +470,11 @@ def test_a_reference_check_with_an_extra_field_is_named(tmp_path):
 
 def test_predict_needs_no_training_stack_when_nothing_can_run(tmp_path, monkeypatch, capsys):
     import check_model.__main__ as cli
-    from check_model.prompt import PROMPT_FORMAT_VERSION, prompt_sha256
 
     monkeypatch.setattr(cli, "_require_training_stack", lambda: sys.exit("peft is not installed"))
     run = tmp_path / "run"
     run.mkdir()
-    (run / "run_manifest.json").write_text(json.dumps({"prompt": {
-        "format_version": PROMPT_FORMAT_VERSION, "system_prompt": "p", "system_prompt_sha256": prompt_sha256("p")}}),
-        encoding="utf-8")
+    (run / "run_manifest.json").write_text(json.dumps(valid_manifest()), encoding="utf-8")
     source = tmp_path / "queries.json"
     source.write_text('[{"scene": ""}]', encoding="utf-8")
     config = tmp_path / "empty.yaml"
@@ -582,3 +576,63 @@ def test_a_run_manifest_with_a_repeated_key_is_refused(tmp_path):
     config.write_text("", encoding="utf-8")
     with pytest.raises(SystemExit, match=r"--run .*duplicate key\(s\) \['base_model'\]"):
         main(["predict", "--run", str(run), "--config", str(config), "--input", str(query)])
+
+
+def test_prepare_with_a_source_holding_no_records_keeps_the_last_splits(tmp_path, subset, write_source):
+    from check_model.adapter import SECTION_KIND
+
+    source = write_source(subset)
+    cfg = config_file(tmp_path, source)
+    main(["prepare", "--config", cfg])
+    before = {p.name: p.read_bytes() for p in (tmp_path / "prepared").glob("*.jsonl")}
+    assert before["train.jsonl"]
+    for section in SECTION_KIND:
+        subset.pop(section, None)
+    write_source(subset)
+    with pytest.raises(SystemExit):
+        main(["prepare", "--config", cfg])
+    assert {p.name: p.read_bytes() for p in (tmp_path / "prepared").glob("*.jsonl")} == before
+
+
+def test_duplicate_inputs_are_found_within_and_across_splits():
+    from check_model.prepare import duplicate_inputs
+
+    a = {"id": "a", "input": {"scene": "A cliff.", "player_action": "I climb."}}
+    copy_ = {"id": "b", "input": {"player_action": "I  CLIMB.", "scene": "A cliff."}}  # order, space, case
+    other = {"id": "c", "input": {"scene": "A river.", "player_action": "I swim."}}
+    assert duplicate_inputs({"train": [a], "val": [copy_, other]}) == [["a", "b"]]
+    assert duplicate_inputs({"val": [a, copy_]}) == [["a", "b"]]
+    assert duplicate_inputs({"train": [a], "val": [other]}) == []
+
+
+@pytest.mark.parametrize("damage, problem", [
+    (lambda m: m.clear(), "precision is missing"),
+    (lambda m: m["base_model"].update(trust_remote_code="yes"), "base_model.trust_remote_code has the wrong type"),
+    (lambda m: m["examples"].update(train_links={"a": "b"}), "examples.train_links has the wrong type"),
+    (lambda m: m["config"]["data"].pop("split_seed"), r"config: the recorded config lacks \['data.split_seed'\]"),
+    (lambda m: m["config"]["train"].update(learning_rate=0), "config: config key 'train.learning_rate' must be above 0"),
+])
+def test_a_damaged_run_manifest_is_a_named_refusal(tmp_path, damage, problem):
+    from check_model.infer import read_manifest
+
+    run = tmp_path / "run"
+    run.mkdir()
+    manifest = valid_manifest()
+    assert read_manifest_ok(run, manifest)
+    damage(manifest)
+    (run / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="not a run manifest .*" + problem):
+        read_manifest(run)
+    query = tmp_path / "query.json"
+    query.write_text('{"scene": "A cliff.", "player_action": "I climb."}', encoding="utf-8")
+    for argv in (["predict", "--run", str(run), "--input", str(query)],
+                 ["evaluate", "--run", str(run), "--split", "val"]):
+        with pytest.raises(SystemExit, match=f"--run {re.escape(str(run))}: .*not a run manifest .*{problem}"):
+            main(argv)
+
+
+def read_manifest_ok(run, manifest) -> bool:
+    from check_model.infer import read_manifest
+
+    (run / "run_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return read_manifest(run) == manifest

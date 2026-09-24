@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 from . import prompt, strictjson
-from .adapter import Report, Row, load_rows
+from .adapter import Report, Row, input_key, load_rows
 from .catalog import Catalog, load_catalog
 from .splits import assign_splits
 
@@ -234,6 +234,17 @@ def duplicate_ids(splits: dict[str, list[dict]]) -> list[str]:
         for row in rows:
             count[row["id"]] = count.get(row["id"], 0) + 1
     return sorted(i for i, n in count.items() if n > 1)
+
+
+def duplicate_inputs(splits: dict[str, list[dict]]) -> list[list[str]]:
+    """Ids whose rows have the same input by prepare's duplicate check, within or across split
+    files. prepare refuses these; in changed split files a copy under a new id would be scored
+    twice and weigh twice in every metric."""
+    by_key: dict[str, list[str]] = {}
+    for rows in splits.values():
+        for row in rows:
+            by_key.setdefault(input_key(row["input"]), []).append(row["id"])
+    return sorted(ids for ids in by_key.values() if len(ids) > 1)
 
 
 def summary(report: Report) -> str:

@@ -176,29 +176,35 @@ def parse_skill_bank(text: str) -> list[dict]:
     return rows
 
 
+def _git_output(root: Path, *args: str) -> bytes | None:
+    try:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def sync_from_meridia(meridia_dir: str | Path) -> Catalog:
     root = Path(meridia_dir)
-    try:
-        dirty = subprocess.run(
-            ["git", "-C", str(root), "status", "--porcelain", "--", SKILL_BANK_PATH, CHECK_TURN_PATH],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        dirty = ""  # not a git checkout: the snapshot records no commit, below
-    if dirty:
-        # The snapshot records HEAD as its commit; bytes HEAD does not hold would make that a lie.
-        raise ValueError(f"{root} has uncommitted changes to the catalog sources ({dirty.splitlines()}); "
-                         "commit or stash them, then sync")
-    skill_bytes = (root / SKILL_BANK_PATH).read_bytes()
-    check_bytes = (root / CHECK_TURN_PATH).read_bytes()
+    head = _git_output(root, "rev-parse", "--verify", "HEAD^{commit}")
+    commit = head.decode("ascii").strip() if head else None  # None: not a git checkout
+    if commit is None:
+        skill_bytes = (root / SKILL_BANK_PATH).read_bytes()
+        check_bytes = (root / CHECK_TURN_PATH).read_bytes()
+    else:
+        dirty = _git_output(root, "status", "--porcelain", "--", SKILL_BANK_PATH, CHECK_TURN_PATH)
+        if dirty is None or dirty.strip():
+            # The snapshot records HEAD as its commit; the working tree is what the person sees.
+            listed = dirty.decode("utf-8", "replace").splitlines() if dirty else "git status failed"
+            raise ValueError(f"{root} has uncommitted changes to the catalog sources ({listed}); "
+                             "commit or stash them, then sync")
+        # Both files from the one commit resolved above, not from the working tree: a checkout
+        # or an edit in between cannot mix two revisions under one recorded commit.
+        blobs = [_git_output(root, "cat-file", "blob", f"{commit}:{path}")
+                 for path in (SKILL_BANK_PATH, CHECK_TURN_PATH)]
+        if None in blobs:
+            raise ValueError(f"{root}: commit {commit} does not hold {SKILL_BANK_PATH} and {CHECK_TURN_PATH}")
+        skill_bytes, check_bytes = blobs
     check_source = check_bytes.decode("utf-8")
-    try:
-        commit = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        commit = None
     return Catalog(
         skills=tuple(parse_skill_bank(skill_bytes.decode("utf-8"))),
         attributes=_tuple_constant(check_source, "ATTRIBUTES"),

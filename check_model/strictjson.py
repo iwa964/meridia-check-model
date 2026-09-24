@@ -35,13 +35,33 @@ def _finite_float(token: str) -> float:
     return value
 
 
+#: Deepest nesting of objects and lists accepted. Enforced here rather than left to the decoder,
+#: whose own limit is an implementation detail (Python 3.14 decodes far deeper than 3.11), so
+#: every recursive walker downstream sees at most this. The deepest document read legitimately
+#: is a source record carrying a runtime_state at prompt.MAX_JSON_DEPTH: 103 levels.
+MAX_DEPTH = 200
+
+
+def _too_deep(value: Any) -> bool:
+    stack = [(value, 1)]
+    while stack:  # iterative: the check must not itself recurse
+        item, depth = stack.pop()
+        if isinstance(item, (dict, list)):
+            if depth > MAX_DEPTH:
+                return True
+            stack.extend((child, depth + 1) for child in (item.values() if isinstance(item, dict) else item))
+    return False
+
+
 def loads(text: str) -> Any:
     """json.loads, raising ValueError on a repeated key, a NaN / Infinity constant, a number
-    too large for a finite float, or nesting deeper than the decoder can follow."""
+    too large for a finite float, or nesting deeper than MAX_DEPTH."""
     try:
-        return json.loads(text, object_pairs_hook=_unique, parse_constant=_no_constant,
-                          parse_float=_finite_float)
+        value = json.loads(text, object_pairs_hook=_unique, parse_constant=_no_constant,
+                           parse_float=_finite_float)
     except RecursionError:
-        # A few thousand nested brackets exhaust the interpreter's recursion limit. That is bad
-        # input like any other, not an exception past every caller's ValueError handler.
-        raise ValueError("nested too deeply to decode") from None
+        # Past the interpreter's recursion limit the decoder itself gives up (Python 3.11).
+        raise ValueError(f"nested more than {MAX_DEPTH} levels deep") from None
+    if _too_deep(value):
+        raise ValueError(f"nested more than {MAX_DEPTH} levels deep")
+    return value

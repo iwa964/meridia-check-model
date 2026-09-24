@@ -200,6 +200,28 @@ def _unique_mapping(loader: yaml.SafeLoader, node: yaml.MappingNode, deep: bool 
 _UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _unique_mapping)
 
 
+def _missing(base: dict, mapping: dict, prefix: str = "") -> list[str]:
+    out = []
+    for key, default in base.items():
+        if key not in mapping:
+            out.append(prefix + key)
+        elif isinstance(default, dict) and isinstance(mapping[key], dict):
+            out.extend(_missing(default, mapping[key], prefix + key + "."))
+    return out
+
+
+def check_recorded_config(config) -> None:
+    """A config as a run manifest records it (ValueError otherwise): every key present -- none
+    filled in from today's defaults, which may not be what the run used -- and every value
+    passing the checks load_config applies."""
+    if not isinstance(config, dict):
+        raise ValueError(f"the recorded config must be a mapping, got {type(config).__name__}")
+    _check_ranges(_merge(DEFAULTS, config))
+    missing = _missing(DEFAULTS, config)
+    if missing:
+        raise ValueError(f"the recorded config lacks {missing}")
+
+
 def load_config(path: str | Path | None) -> dict:
     if path is None:
         return copy.deepcopy(DEFAULTS)

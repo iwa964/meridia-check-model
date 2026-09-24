@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import platform
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -301,6 +303,14 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
         for entry in trainer.state.log_history:
             f.write(json.dumps(entry) + "\n")
 
+    # A diverged run can report a NaN or infinite loss. json.dumps would write the non-JSON token
+    # NaN, and every later read of the manifest (strict JSON) would refuse the run; the value is
+    # kept as null, and what it was is recorded beside it.
+    non_finite = {k: repr(v) for k, v in metrics.items() if isinstance(v, float) and not math.isfinite(v)}
+    metrics = {k: (None if k in non_finite else v) for k, v in metrics.items()}
+    if non_finite:
+        print(f"warning: non-finite training metrics {non_finite}; the run did not converge", file=sys.stderr)
+
     base_config = model.get_base_model().config if lora_cfg["enabled"] else model.config
     manifest = {
         "mode": mode,
@@ -352,6 +362,7 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
         },
         "token_lengths": {"train": train_stats, "val": val_stats},
         "metrics": metrics,
+        "non_finite_metrics": non_finite,
         "environment": {
             "python": platform.python_version(), "torch": torch.__version__,
             "transformers": transformers.__version__, "peft": peft.__version__,
@@ -361,6 +372,7 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
             "repo_dirty": bool(_git("status", "--porcelain", "--", "check_model", "configs", "catalog")),
         },
     }
-    (run_dir / "run_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-                                               encoding="utf-8")
+    # allow_nan=False: a manifest the strict reader would refuse is never written.
+    (run_dir / "run_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False)
+                                               + "\n", encoding="utf-8")
     return manifest

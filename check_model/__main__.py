@@ -220,7 +220,7 @@ class _LazyModel:
 def cmd_evaluate(args) -> None:
     from .evaluate import evaluate_rows, training_relatives
     from .infer import check_format, load_run_catalog
-    from .prepare import duplicate_ids, read_split
+    from .prepare import duplicate_ids, duplicate_inputs, read_split
 
     config = _run_config(args)
     # Every refusal below needs only the manifest and file hashes: checking them before the model
@@ -255,6 +255,9 @@ def cmd_evaluate(args) -> None:
     repeated = duplicate_ids(splits)
     if repeated:
         sys.exit(f"refusing to evaluate: ids in more than one split file: {repeated}; re-run prepare")
+    same = duplicate_inputs(splits)
+    if same:
+        sys.exit(f"refusing to evaluate: rows with the same input under different ids: {same}; re-run prepare")
     rows = splits[args.split]
     mismatch = _data_mismatch(config, manifest, rows)  # now with the rows' language
     if mismatch:
