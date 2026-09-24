@@ -109,12 +109,40 @@ def test_fp16_lora_keeps_the_adapter_in_fp32(tiny):
     ("bf16", "cuda:1", "bfloat16"), ("fp16", "cuda:0", "float16"), ("bf16", "cuda", "bfloat16"),
     ("bf16", "cpu", "float32"), ("fp32", "cuda:1", "float32"),
 ])
-def test_serving_dtype_on_any_cuda_device(precision, device, dtype):
+def test_serving_dtype_on_any_cuda_device(precision, device, dtype, monkeypatch):
     import torch
 
-    from check_model.infer import serving_dtype
+    import check_model.infer as infer
 
-    assert serving_dtype(precision, device) is getattr(torch, dtype)
+    monkeypatch.setattr(infer, "_bf16_supported", lambda device: True)
+    assert infer.serving_dtype(precision, device) is getattr(torch, dtype)
+
+
+def test_bf16_run_on_a_gpu_without_bf16_serves_in_fp32(monkeypatch):
+    import torch
+
+    import check_model.infer as infer
+
+    monkeypatch.setattr(infer, "_bf16_supported", lambda device: False)
+    assert infer.serving_dtype("bf16", "cuda:0") is torch.float32
+    assert infer.serving_dtype("fp16", "cuda:0") is torch.float16
+
+
+def test_rows_past_the_base_models_context_are_refused(tiny, tmp_path):
+    import shutil
+
+    from check_model.train import train
+
+    base = tmp_path / "short-context"
+    shutil.copytree(tiny["dir"], base)
+    cfg = json.loads((base / "config.json").read_text())
+    cfg["max_position_embeddings"] = 64
+    (base / "config.json").write_text(json.dumps(cfg))
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(base)
+    config["train"]["max_seq_length"] = 100000  # the configured limit alone would accept every row
+    with pytest.raises(ValueError, match="exceeds the base model's context of 64"):
+        train(config, tiny["rows"][:1], [], run_dir=tmp_path / "run", source_files=[], max_steps=1)
 
 
 def test_each_tiny_smoke_run_keeps_its_own_base(tmp_path, monkeypatch):

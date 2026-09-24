@@ -67,3 +67,18 @@ def test_load_dtype(precision, lora, dtype):
 def test_an_unknown_precision_is_refused():
     with pytest.raises(ValueError, match="fp116"):
         resolve_precision("fp116")
+
+
+def test_a_failed_prepare_does_not_vouch_for_the_kept_splits(tmp_path, subset, write_source):
+    from check_model.__main__ import _data_mismatch
+
+    main(["prepare", "--config", config_file(tmp_path, SUBSET)])  # source A: clean, splits written
+    record(subset, "dice_train_000001")["annotation"]["checks"][0]["name"] = "maintenance"
+    source_b = write_source(subset)
+    with pytest.raises(SystemExit):  # source B: fails, splits from A are kept
+        main(["prepare", "--config", config_file(tmp_path, source_b)])
+    prepared = {"data": {"prepared_dir": str(tmp_path / "prepared")}}
+    trained_on_b = {"config": {"data": {"sources": [source_b]}}, "prompt": {"language": "en"}}
+    assert "trained on" in _data_mismatch(prepared, trained_on_b, [])
+    trained_on_a = {"config": {"data": {"sources": [str(SUBSET)]}}, "prompt": {"language": "en"}}
+    assert _data_mismatch(prepared, trained_on_a, []) is None

@@ -95,3 +95,11 @@ def test_scoring_training_rows_is_labelled_not_held_out(tmp_path):
 def test_only_the_test_split_is_independent(tmp_path):
     metrics = evaluate_rows(EchoModel(decide(CLIMB_EXTREME)), rows(), split="test", train_ids=set(), out_dir=tmp_path)
     assert metrics["independent_test"] is True
+
+
+def test_a_split_whose_rows_were_all_trained_on_claims_nothing(tmp_path):
+    metrics = evaluate_rows(EchoModel(decide(CLIMB_EXTREME)), rows(), split="test", train_ids={"r0", "r1", "r2"},
+                            out_dir=tmp_path)
+    assert metrics["scored"] == 0
+    assert metrics["held_out"] is False and metrics["independent_test"] is False
+    assert "every test row was used in training" in metrics["note"]

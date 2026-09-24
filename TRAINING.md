@@ -37,7 +37,8 @@ Run every command from the repository root; config paths are relative to it.
 python -m check_model prepare --config configs/sft_example.yaml
 ```
 
-This writes `build/data/{train,val,test}.jsonl` and `build/data/report.json`, and prints a
+This writes `build/data/{train,val,test}.jsonl`, `build/data/splits_provenance.json` (the sources
+those split files were built from, which `evaluate` checks) and `build/data/report.json`, and prints a
 summary. Every source record lands in exactly one bucket:
 
 | Bucket | Meaning | 2026-09-23, dataset at db81744 (50 records; rerun `prepare` for current figures) |

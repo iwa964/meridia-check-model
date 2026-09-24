@@ -80,9 +80,13 @@ def _run_config(args) -> dict:
 def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None:
     """Why the prepared data is not the data this run was trained on, or None. Scoring a run on
     another experiment's prepared files would still print plausible metrics."""
+    from .prepare import PROVENANCE
+
     prepared = Path(config["data"]["prepared_dir"])
-    report = json.loads((prepared / "report.json").read_text(encoding="utf-8"))
-    have = [s["path"] for s in report["sources"]]
+    if not (prepared / PROVENANCE).exists():
+        return f"{prepared} has no {PROVENANCE}; re-run prepare"
+    provenance = json.loads((prepared / PROVENANCE).read_text(encoding="utf-8"))
+    have = [s["path"] for s in provenance["sources"]]
     want = list(manifest["config"]["data"]["sources"])
     if have != want:
         return f"{prepared} was prepared from {have}, but the run was trained on {want}"

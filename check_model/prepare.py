@@ -16,6 +16,9 @@ from .catalog import load_catalog
 from .splits import assign_splits
 
 
+PROVENANCE = "splits_provenance.json"
+
+
 def build(config: dict) -> tuple[list[Row], Report]:
     data = config["data"]
     catalog = load_catalog(data["catalog"])
@@ -56,6 +59,11 @@ def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool 
             for row in rows:
                 if row.split == split:
                     f.write(json.dumps(row.to_json(), ensure_ascii=False) + "\n")
+    if splits:
+        # What the split files were built from. Written only beside them: report.json is also
+        # rewritten by a failed prepare, so it cannot say where the kept split files came from.
+        (out / PROVENANCE).write_text(json.dumps({"sources": report.sources}, ensure_ascii=False, indent=2) + "\n",
+                                      encoding="utf-8")
     (out / "report.json").write_text(json.dumps(report.to_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

@@ -78,8 +78,11 @@ def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], o
             "format_errors": pred["errors"], "scores": s, "game_request": pred["game_request"],
             "note": pred["note"], "trained_on": row["id"] in train_ids,
         })
-    held_out = not any(r["trained_on"] for r in records) and split != "train"
-    if not held_out:
+    held_out = bool(records) and not any(r["trained_on"] for r in records) and split != "train"
+    if not records:
+        note = (f"the {split} split is empty; nothing was scored" if not rows else
+                f"nothing was scored: every {split} row was used in training")
+    elif not held_out:
         note = "NOT a held-out result: scored rows were used in training. This verifies the pipeline only."
     elif split == "val":
         note = ("held-out validation on general scenes, the same distribution as training; "
@@ -95,8 +98,6 @@ def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], o
         "excluded_trained_rows": [] if include_training_rows else sorted(r["id"] for r in seen),
         "fields": summarize(scores),
     }
-    if not rows:
-        metrics["note"] = f"the {split} split is empty; nothing was scored"
     with (out_dir / "predictions.jsonl").open("w", encoding="utf-8") as f:
         for rec in records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")

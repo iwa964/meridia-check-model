@@ -33,7 +33,7 @@ def _git(*args: str) -> str | None:
         return None
 
 
-def encode(tokenizer, system: str, row: dict, max_seq_length: int) -> dict:
+def encode(tokenizer, system: str, row: dict, max_seq_length: int, context_limit: int | None = None) -> dict:
     """Token ids and loss labels for one row. Raises ValueError naming the row on anything
     that would make the labels wrong or the answer truncated."""
     prompt_messages = prompt.messages(system, row["input"])
@@ -55,15 +55,19 @@ def encode(tokenizer, system: str, row: dict, max_seq_length: int) -> dict:
     if len(full_ids) > max_seq_length:
         raise ValueError(f"{row['id']}: {len(full_ids)} tokens (prompt {len(prompt_ids)}) exceeds "
                          f"max_seq_length {max_seq_length}; raise it rather than truncate the answer")
+    if context_limit is not None and len(full_ids) > context_limit:
+        raise ValueError(f"{row['id']}: {len(full_ids)} tokens exceeds the base model's context of "
+                         f"{context_limit}; shorten the input or use a model with a longer context")
     labels = [IGNORE_INDEX] * len(prompt_ids) + full_ids[len(prompt_ids):]
     return {"input_ids": full_ids, "labels": labels, "id": row["id"]}
 
 
-def encode_all(tokenizer, system: str, rows: list[dict], max_seq_length: int) -> tuple[list[dict], dict]:
+def encode_all(tokenizer, system: str, rows: list[dict], max_seq_length: int,
+               context_limit: int | None = None) -> tuple[list[dict], dict]:
     encoded, errors = [], []
     for row in rows:
         try:
-            encoded.append(encode(tokenizer, system, row, max_seq_length))
+            encoded.append(encode(tokenizer, system, row, max_seq_length, context_limit))
         except ValueError as exc:
             errors.append(str(exc))
     if errors:
@@ -71,7 +75,7 @@ def encode_all(tokenizer, system: str, rows: list[dict], max_seq_length: int) ->
     lengths = [len(e["input_ids"]) for e in encoded]
     stats = {"rows": len(lengths), "max_tokens": max(lengths, default=0),
              "mean_tokens": round(sum(lengths) / len(lengths), 1) if lengths else 0,
-             "max_seq_length": max_seq_length}
+             "max_seq_length": max_seq_length, "model_context": context_limit}
     return encoded, stats
 
 
@@ -119,6 +123,15 @@ def load_dtype(precision: str, lora: bool) -> str:
     return "float32"
 
 
+def model_context_limit(model_cfg: dict) -> int | None:
+    """The base model's positional limit, read from its config before any row is encoded."""
+    from transformers import AutoConfig
+
+    config = AutoConfig.from_pretrained(model_cfg["base_model"], revision=model_cfg["revision"],
+                                        trust_remote_code=model_cfg["trust_remote_code"])
+    return getattr(config, "max_position_embeddings", None)
+
+
 def load_tokenizer(name_or_path: str, revision: str | None, trust_remote_code: bool):
     from transformers import AutoTokenizer
 
@@ -147,9 +160,10 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
     catalog = load_catalog(config["data"]["catalog"])
     system = prompt.system_prompt(catalog)
     tokenizer = load_tokenizer(model_cfg["base_model"], model_cfg["revision"], model_cfg["trust_remote_code"])
-    train_set, train_stats = encode_all(tokenizer, system, train_rows, train_cfg["max_seq_length"])
+    context = model_context_limit(model_cfg)
+    train_set, train_stats = encode_all(tokenizer, system, train_rows, train_cfg["max_seq_length"], context)
     val_trainable = [r for r in val_rows if r.get("target") is not None]
-    val_set, val_stats = encode_all(tokenizer, system, val_trainable, train_cfg["max_seq_length"])
+    val_set, val_stats = encode_all(tokenizer, system, val_trainable, train_cfg["max_seq_length"], context)
 
     precision = resolve_precision(train_cfg["precision"])
     model = AutoModelForCausalLM.from_pretrained(

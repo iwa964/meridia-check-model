@@ -33,13 +33,26 @@ def check_format(manifest: dict) -> None:
                          "retrain, or load it with the code version that trained it")
 
 
-def serving_dtype(precision: str, device: str):
-    """The dtype a run is served in: its training half precision on any CUDA device (indexed
-    or not), fp32 otherwise."""
+def _bf16_supported(device: str) -> bool:
     import torch
 
-    half = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(precision)
-    return half if half is not None and torch.device(device).type == "cuda" else torch.float32
+    with torch.cuda.device(torch.device(device)):
+        return torch.cuda.is_bf16_supported()
+
+
+def serving_dtype(precision: str, device: str):
+    """The dtype a run is served in: its training half precision on a CUDA device (indexed or
+    not), fp32 on anything else -- and fp32 for a bf16 run on a GPU without bf16, rather than
+    kernels that GPU lacks (fp16 could overflow values a bf16 model produces)."""
+    import torch
+
+    if torch.device(device).type != "cuda":
+        return torch.float32
+    if precision == "fp16":
+        return torch.float16
+    if precision == "bf16" and _bf16_supported(device):
+        return torch.bfloat16
+    return torch.float32
 
 
 class CheckModel:
