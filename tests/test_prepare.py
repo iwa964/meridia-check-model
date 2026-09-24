@@ -464,3 +464,21 @@ def test_predict_needs_no_training_stack_when_nothing_can_run(tmp_path, monkeypa
     config.write_text("", encoding="utf-8")
     main(["predict", "--run", str(run), "--config", str(config), "--input", str(source)])
     assert json.loads(capsys.readouterr().out)[0]["errors"][0].startswith("bad query: ")
+
+
+def test_predict_names_an_input_that_is_not_utf8(tmp_path):
+    source = tmp_path / "queries.json"
+    source.write_bytes(b'{"scene": "\xff", "player_action": "a"}')
+    config = tmp_path / "empty.yaml"
+    config.write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit, match="not valid JSON"):
+        main(["predict", "--run", str(tmp_path / "no-run"), "--config", str(config), "--input", str(source)])
+
+
+def test_a_blank_similarity_text_is_named(tmp_path):
+    from check_model.prepare import read_split
+
+    (tmp_path / "val.jsonl").write_text(json.dumps({**VALID_ROW, "similarity_text": "  "}) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"not a prepared row \(similarity_text is blank"):
+        read_split(tmp_path, "val")
+

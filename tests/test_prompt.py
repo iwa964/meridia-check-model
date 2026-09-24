@@ -103,3 +103,16 @@ def test_runtime_state_must_be_plain_finite_json(state, problem):
     assert prompt.query_errors({"scene": "s", "player_action": "a", "runtime_state": state}) == [problem]
     assert prompt.query_errors({"scene": "s", "player_action": "a",
                                 "runtime_state": {"hp": 3, "in_combat": False, "tags": ["a"], "x": 0.5}}) == []
+
+
+def test_duplicate_key_detection_is_linear():
+    import time
+
+    from check_model import strictjson
+
+    wide = "{" + ", ".join(f'"k{i}": {i}' for i in range(100_000)) + "}"
+    started = time.perf_counter()
+    assert len(strictjson.loads(wide)) == 100_000
+    assert time.perf_counter() - started < 2.0  # keys.count() per key took ~10 s here
+    with pytest.raises(ValueError, match=r"duplicate key\(s\) \['a', 'b'\]"):
+        strictjson.loads('{"b": 1, "a": 1, "b": 2, "a": 2}')

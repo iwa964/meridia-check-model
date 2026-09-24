@@ -64,9 +64,10 @@ def _note_moves(rows: list[Row], report: Report, prepared_dir: str | Path) -> No
 
 
 def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool = True,
-          split_config: dict | None = None) -> None:
+          split_config: dict | None = None) -> dict[str, str]:
     """The report always; the split files only when `splits` -- a prepare with errors must not
-    replace the last clean split files with partial ones."""
+    replace the last clean split files with partial ones. Returns the SHA-256 of each split's
+    bytes as written, so a caller training from `rows` records exactly those."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     hashes = {}
@@ -83,6 +84,7 @@ def write(rows: list[Row], report: Report, out_dir: str | Path, *, splits: bool 
         provenance = {"sources": report.sources, "split_config": split_config, "split_sha256": hashes}
         (out / PROVENANCE).write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "report.json").write_text(json.dumps(report.to_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return hashes
 
 
 def split_hashes(prepared_dir: str | Path) -> dict[str, str | None]:
@@ -157,6 +159,10 @@ def _row_problem(row: dict, split: str, catalog=None) -> str | None:
     for key in ("links", "group_members"):
         if not all(_is_id(i) for i in row[key]):
             return f"{key} must hold ids"
+    if not row["similarity_text"].strip():
+        # The adapter always writes the scene and action here; blank, the near-duplicate check
+        # against training texts would see nothing and let a renamed variant through.
+        return "similarity_text is blank"
     # The same check predict applies: a damaged input would otherwise be scored as a wrong answer.
     query_problems = prompt.query_errors(row["input"])
     if query_problems:

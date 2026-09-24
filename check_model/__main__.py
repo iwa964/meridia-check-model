@@ -19,14 +19,16 @@ def _prepare(config: dict):
 
     rows, report = build(config)
     print(summary(report))
-    write(rows, report, config["data"]["prepared_dir"], splits=not report.errors,
-          split_config={k: config["data"][k] for k in SPLIT_KEYS})
+    hashes = write(rows, report, config["data"]["prepared_dir"], splits=not report.errors,
+                   split_config={k: config["data"][k] for k in SPLIT_KEYS})
     if report.errors:
         print(f"\n{len(report.errors)} error(s): fix the source records above; nothing downstream will run; "
               "the split files from the last clean prepare are left as they were.",
               file=sys.stderr)
         sys.exit(1)
-    return rows, report
+    # The hashes of the bytes just written from these rows -- not a later read of the files,
+    # which another prepare could have replaced by then.
+    return rows, report, hashes
 
 
 def _require_training_stack() -> None:
@@ -65,14 +67,14 @@ def cmd_train(args) -> None:
     from .train import train
 
     config = load_config(args.config)
-    rows, report = _prepare(config)
+    rows, report, split_sha256 = _prepare(config)
     train_rows = [r.to_json() for r in rows if r.split == "train"]
     val_rows = [r.to_json() for r in rows if r.split == "val"]
     if not train_rows:
         sys.exit("no training rows")
     run_dir = _run_dir(config, config["run_name"])
     manifest = train(config, train_rows, val_rows, run_dir=run_dir, source_files=report.sources,
-                     split_sha256=split_hashes(config["data"]["prepared_dir"]))
+                     split_sha256=split_sha256)
     print(json.dumps(manifest["metrics"], indent=2))
     print(f"saved {run_dir}")
 
@@ -159,11 +161,11 @@ def cmd_predict(args) -> None:
     from .infer import check_format
 
     config = _run_config(args)
-    text = Path(args.input).read_text(encoding="utf-8") if args.input != "-" else sys.stdin.read()
+    raw = Path(args.input).read_bytes() if args.input != "-" else sys.stdin.buffer.read()
     from . import strictjson
 
-    try:
-        queries = strictjson.loads(text)  # a repeated scene or action is ambiguous, not "last wins"
+    try:  # UnicodeDecodeError is a ValueError: invalid UTF-8 is a bad input, not a traceback
+        queries = strictjson.loads(raw.decode("utf-8"))  # a repeated key is ambiguous, not "last wins"
     except ValueError as e:
         sys.exit(f"--input {args.input}: not valid JSON ({e})")
     if not isinstance(queries, (dict, list)):
@@ -283,7 +285,7 @@ def cmd_smoke(args) -> None:
         stages.append(stage)
         print(f"[ok] {stage}: {detail}", flush=True)
 
-    rows, report = _prepare(config)
+    rows, report, split_sha256 = _prepare(config)
     done("load + validate", f"{len(report.trainable)} trainable rows, {len(report.errors)} errors")
 
     smoke = config["smoke"]
@@ -317,7 +319,7 @@ def cmd_smoke(args) -> None:
 
     manifest = train(config, picked, [], run_dir=run_dir, source_files=report.sources,
                      max_steps=smoke["max_steps"], mode="smoke",
-                     split_sha256=split_hashes(config["data"]["prepared_dir"]), run_dir_created=args.tiny)
+                     split_sha256=split_sha256, run_dir_created=args.tiny)
     losses = [e["loss"] for e in _train_log(run_dir) if "loss" in e]
     done("train", f"{manifest['global_steps']} steps, loss {losses[0] if losses else '?'} -> "
                   f"{losses[-1] if losses else '?'}")

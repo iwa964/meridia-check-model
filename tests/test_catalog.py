@@ -105,3 +105,11 @@ def test_sync_refuses_a_kind_this_code_does_not_implement(tmp_path):
     with pytest.raises(SystemExit, match=r"catalog kinds \['skill', 'attribute', 'save'\]"):
         main(["sync-catalog", "--meridia", str(root), "--out", str(out)])
     assert not out.exists()
+
+
+@pytest.mark.parametrize("text, message", [
+    (SKILL_ROWS.replace('{"name":', '{ "name":'), "parsed 0 skill rows but found 2"),
+    ("extends Node\n", "no skill rows found")])
+def test_a_reformatted_or_empty_skill_bank_is_refused(text, message):
+    with pytest.raises(ValueError, match=message):
+        parse_skill_bank(text)

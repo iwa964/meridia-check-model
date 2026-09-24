@@ -117,16 +117,23 @@ def _tuple_constant(source: str, name: str) -> tuple[str, ...]:
     raise ValueError(f"{CHECK_TURN_PATH} defines no {name}")
 
 
+#: A skill row's opening however it is spaced: `{"name":`, `{ "name" :`, ...
+_ROW_START = re.compile(r'\{\s*"name"\s*:')
+
+
 def parse_skill_bank(text: str) -> list[dict]:
     rows = [m.groupdict() for m in _SKILL_ROW.finditer(text)]
-    # Every `{"name":` line must parse: a row in an unexpected format would otherwise be
-    # dropped from the label set without a word.
-    expected = text.count('{"name":')
+    # Every row opening must parse: a row in an unexpected format would otherwise be dropped from
+    # the label set without a word. Counted spacing-independently, so a reformatted file is caught
+    # instead of both counts reading zero.
+    expected = len(_ROW_START.findall(text))
     if len(rows) != expected:
         raise ValueError(
             f"{SKILL_BANK_PATH}: parsed {len(rows)} skill rows but found {expected} "
             '\'{"name":\' entries -- the row format changed; update _SKILL_ROW'
         )
+    if not rows:
+        raise ValueError(f"{SKILL_BANK_PATH}: no skill rows found; the file or its format changed")
     return rows
 
 

@@ -554,3 +554,34 @@ def test_evaluate_records_inference_and_binds_catalog_and_split_bytes(tiny, tmp_
 
     with pytest.raises(ValueError, match="the run's label set was edited"):
         CheckModel(run, max_new_tokens=4)
+
+
+def test_training_records_the_split_bytes_it_was_built_from(tiny, tmp_path, monkeypatch):
+    import hashlib
+
+    import yaml
+
+    import check_model.prepare as prepare_module
+    from check_model.__main__ import main
+
+    real_write = prepare_module.write
+    written = {}
+
+    def write_then_replace(rows, report, out_dir, **kwargs):
+        result = real_write(rows, report, out_dir, **kwargs)
+        for split in ("train", "val", "test"):
+            written[split] = hashlib.sha256((Path(out_dir) / f"{split}.jsonl").read_bytes()).hexdigest()
+        (Path(out_dir) / "val.jsonl").write_text("", encoding="utf-8")  # another prepare, meanwhile
+        return result
+
+    monkeypatch.setattr(prepare_module, "write", write_then_replace)
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(SUBSET)], "catalog": str(Path(__file__).resolve().parent.parent / "catalog" / "meridia_catalog.json"),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+    assert json.loads((run / "run_manifest.json").read_text())["examples"]["split_sha256"] == written

@@ -13,10 +13,11 @@ from typing import Any
 
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict:
-    keys = [k for k, _ in pairs]
-    repeated = sorted({k for k in keys if keys.count(k) > 1})
+    seen, repeated = set(), set()
+    for key, _ in pairs:  # one pass: keys.count() per key was quadratic in the object's size
+        (repeated if key in seen else seen).add(key)
     if repeated:
-        raise ValueError(f"duplicate key(s) {repeated} in one object")
+        raise ValueError(f"duplicate key(s) {sorted(repeated)} in one object")
     return dict(pairs)
 
 
