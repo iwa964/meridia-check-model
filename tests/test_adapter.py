@@ -187,3 +187,12 @@ def test_a_metadata_list_without_ids_is_not_mistaken_for_records(catalog, subset
                                         "repository": "iwa964/MeridiaGame"}]
     _, report = load(catalog, write_source(subset))
     assert report.errors == []
+
+
+@pytest.mark.parametrize("mode", [["observed_event"], {"en": "observed_event"}, 3])
+def test_a_non_string_input_mode_is_a_record_error(catalog, subset, write_source, mode):
+    from helpers import record
+
+    record(subset, "dice_train_000021")["input_mode"] = mode
+    _, report = load(catalog, write_source(subset))
+    assert ("dice_train_000021", f"input_mode must be a string, got {type(mode).__name__}") in messages(report)

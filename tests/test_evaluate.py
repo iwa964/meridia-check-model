@@ -161,3 +161,25 @@ def test_explicit_links_to_a_removed_training_row_still_relate():
                                  train_fingerprints=frozenset(), train_texts=[], threshold=None,
                                  train_links={"gone": ["b"]})
     assert related == {"a", "b"}  # threshold None: links alone, no similarity needed
+
+
+def test_a_scenario_member_reached_only_through_a_removed_chain_stays_related():
+    from check_model.evaluate import training_relatives
+
+    # Trained 000028 <- unsupported 000029 <- 000047, pending then and trainable now; 000028 has
+    # since been removed and 000029 is still in no split file.
+    candidate = dict(_row("dice_train_000047", "dice_train_000029", "A later-annotated variation."),
+                     links=["dice_train_000029"])
+    known = dict(train_ids={"dice_train_000028"}, train_fingerprints=frozenset(), train_texts=[],
+                 threshold=None, train_links={"dice_train_000028": ["dice_train_000029"]})
+    assert training_relatives([candidate], **known) == set()  # no direct link, no shared current group
+    scenario = {"dice_train_000028", "dice_train_000029", "dice_train_000047"}
+    assert training_relatives([candidate], **known, train_scenario_ids=scenario) == {"dice_train_000047"}
+
+
+def test_an_evaluation_emptied_by_related_rows_says_so(tmp_path):
+    metrics = evaluate_rows(EchoModel(decide(CLIMB_EXTREME)), rows(), split="val", train_ids={"r0"},
+                            out_dir=tmp_path, related_to_training=frozenset({"r1", "r2"}))
+    assert metrics["scored"] == 0
+    assert metrics["note"] == ("nothing was scored: every val row was used in training (1) "
+                               "or belongs to a training row's scenario (2)")

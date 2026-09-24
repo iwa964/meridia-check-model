@@ -44,10 +44,19 @@ def _note_moves(rows: list[Row], report: Report, prepared_dir: str | Path) -> No
     before = {}
     for split in ("train", "val", "test"):
         path = Path(prepared_dir) / f"{split}.jsonl"
-        if path.exists():
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    before[json.loads(line)["id"]] = split
+        if not path.exists():
+            continue
+        unreadable = 0
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.strip():
+                continue
+            try:
+                before[json.loads(line)["id"]] = split
+            except (ValueError, TypeError, KeyError):  # an interrupted write, say: it is rebuilt below
+                unreadable += 1
+        if unreadable:
+            report.warnings.append(f"{path}: {unreadable} line(s) of the previous prepare are unreadable; "
+                                   "the moved-row check skips them")
     for row in rows:
         if row.id in before and before[row.id] != row.split:
             report.warnings.append(f"{row.id} moved from {before[row.id]} to {row.split} since the last prepare")

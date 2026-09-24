@@ -66,13 +66,14 @@ class Row:
     similarity_text: str = ""  # scene + action in every language, for near-duplicate grouping
     split: str | None = None
     group: str | None = None
+    group_members: list[str] = field(default_factory=list)  # every id of the scenario, rows or not
 
     def to_json(self) -> dict:
         return {
             "id": self.id, "source": self.source, "section": self.section, "scope": self.scope,
             "split": self.split, "group": self.group, "lang": self.lang, "input": self.input,
             "reference": self.reference, "target": self.target, "similarity_text": self.similarity_text,
-            "links": self.links,
+            "links": self.links, "group_members": self.group_members,
         }
 
 
@@ -171,6 +172,8 @@ def _single_checks(annotation: dict, catalog: Catalog) -> list[dict]:
 
 def _input(record: dict, lang: str) -> dict:
     mode = record.get("input_mode")
+    if mode is not None and not isinstance(mode, str):
+        raise _Invalid(f"input_mode must be a string, got {type(mode).__name__}")
     if mode not in ACTION_FIELD:
         raise _Skip("unsupported", f"input_mode {mode!r}")
     action_field = ACTION_FIELD[mode]

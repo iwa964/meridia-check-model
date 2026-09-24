@@ -362,3 +362,14 @@ def test_evaluate_refuses_split_contents_that_changed_with_the_same_sources(tiny
     assert (tmp_path / "prepared" / "splits_provenance.json").read_text() == provenance
     with pytest.raises(SystemExit, match="val split: trained on [0-9a-f]{12}, now [0-9a-f]{12}"):
         main(["evaluate", "--run", str(run), "--split", "val"])
+
+
+def test_the_manifest_records_every_training_scenario_member(tiny, tmp_path):
+    from check_model.train import train
+
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(tiny["dir"])
+    rows = [dict(r, group_members=[r["id"], "dice_train_000029"]) for r in tiny["rows"][:2]]
+    train(config, rows, [], run_dir=tmp_path / "run", source_files=[], max_steps=1)
+    saved = json.loads((tmp_path / "run" / "run_manifest.json").read_text())
+    assert saved["examples"]["train_scenario_ids"] == sorted({r["id"] for r in rows} | {"dice_train_000029"})

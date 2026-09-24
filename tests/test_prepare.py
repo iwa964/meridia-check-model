@@ -176,3 +176,14 @@ def test_predict_refuses_input_that_is_not_a_query_or_a_list(tmp_path, payload, 
     # Refused before any model is loaded: the run directory does not even exist.
     with pytest.raises(SystemExit, match=message):
         main(["predict", "--run", str(tmp_path / "no-run"), "--config", str(config), "--input", str(source)])
+
+
+def test_a_corrupt_previous_split_file_does_not_block_rebuilding_it(tmp_path):
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    (prepared / "val.jsonl").write_text(json.dumps({"id": "dice_train_000001"}) + "\n" + '{"id": "dice_tr',
+                                        encoding="utf-8")  # a write cut off mid-line
+    config = load_config(config_file(tmp_path, SUBSET, val_fraction=0.0))
+    _, report = build(config)
+    assert "dice_train_000001 moved from val to train since the last prepare" in report.warnings
+    assert any("1 line(s) of the previous prepare are unreadable" in w for w in report.warnings)

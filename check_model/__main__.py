@@ -179,6 +179,7 @@ def cmd_evaluate(args) -> None:
     related = training_relatives(all_rows, train_ids=train_ids, train_fingerprints=fingerprints,
                                  train_texts=model.manifest["examples"].get("train_texts", []),
                                  train_links=model.manifest["examples"].get("train_links", {}),
+                                 train_scenario_ids=set(model.manifest["examples"].get("train_scenario_ids", [])),
                                  threshold=model.manifest["config"]["data"]["near_duplicate_threshold"])
     out = args.out or Path(args.run) / "eval" / args.split
     metrics = evaluate_rows(model, rows, split=args.split, train_ids=train_ids, out_dir=out,

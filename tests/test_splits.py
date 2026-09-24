@@ -122,3 +122,16 @@ def test_unknown_ids_never_join_a_group(catalog, subset, write_source):
     rows, report = split(catalog, [write_source(subset)])
     assert rows["dice_train_000960"].group == "dice_train_000960"
     assert any("links to dice_train_000000" in w for w in report.warnings)
+
+
+def test_scenario_membership_reaches_through_records_that_are_not_rows(catalog, subset, write_source):
+    from helpers import record
+
+    # 000029 (parameterized, unsupported) already links 000028; a pending record linked to 000029
+    # joins 000028's scenario only through a record that never reaches a split file.
+    record(subset, "dice_train_000047")["related_example_id"] = "dice_train_000029"
+    rows, _ = split(catalog, [write_source(subset)])
+    assert "dice_train_000029" not in rows and "dice_train_000047" not in rows
+    assert rows["dice_train_000028"].group_members == ["dice_train_000028", "dice_train_000029",
+                                                       "dice_train_000047"]
+    assert rows["dice_train_000028"].to_json()["group_members"] == rows["dice_train_000028"].group_members

@@ -35,12 +35,15 @@ def input_fingerprint(query: dict) -> str:
 
 def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_fingerprints: frozenset[str],
                         train_texts: list[str], threshold: float | None,
-                        train_links: dict[str, list[str]] | None = None) -> set[str]:
+                        train_links: dict[str, list[str]] | None = None,
+                        train_scenario_ids: set[str] | None = None) -> set[str]:
     """Ids of rows that are not training rows themselves but belong to the same scenario as one:
-    they share a current group with a training row (a link or similarity added after training
-    joins them), they are explicitly linked to or from a training row (recorded at training,
-    so this survives the training row's removal), or their text is a near-duplicate of a
-    training row's (which also survives removal). Scoring them would leak the scenario."""
+    they were grouped with a training row when it was trained (transitively, through records
+    that never reached a split file too), they share a current group with a training row (a
+    link or similarity added after training joins them), they are explicitly linked to or from
+    a training row, or their text is a near-duplicate of a training row's. Everything but the
+    current group is recorded at training, so it survives the training row's removal. Scoring
+    them would leak the scenario."""
     from .splits import similar_pairs
 
     trained = {r["id"] for r in all_rows
@@ -50,6 +53,7 @@ def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_finge
     linked_from_training = {i for links in (train_links or {}).values() for i in links}
     related |= {r["id"] for r in all_rows if r["id"] not in trained
                 and (r["id"] in linked_from_training or set(r.get("links") or []) & set(train_ids))}
+    related |= {r["id"] for r in all_rows if r["id"] not in trained and r["id"] in (train_scenario_ids or ())}
     if threshold is not None and train_texts:
         texts = {r["id"]: r.get("similarity_text") or "" for r in all_rows if r["id"] not in trained}
         texts.update({f"\0train{i}": t for i, t in enumerate(train_texts)})
@@ -124,8 +128,13 @@ def evaluate_rows(model, rows: list[dict], *, split: str, train_ids: set[str], o
         })
     held_out = bool(records) and not any(r["trained_on"] for r in records) and split != "train"
     if not records:
-        note = (f"the {split} split is empty; nothing was scored" if not rows else
-                f"nothing was scored: every {split} row was used in training")
+        if not rows:
+            note = f"the {split} split is empty; nothing was scored"
+        elif not related:
+            note = f"nothing was scored: every {split} row was used in training"
+        else:
+            note = (f"nothing was scored: every {split} row was used in training ({len(seen)}) "
+                    f"or belongs to a training row's scenario ({len(related)})")
     elif not held_out:
         note = "NOT a held-out result: scored rows were used in training. This verifies the pipeline only."
     elif split == "val":

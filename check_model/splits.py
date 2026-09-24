@@ -105,8 +105,15 @@ def assign_splits(rows: list[Row], report: Report, *, val_fraction: float, split
             report.near_duplicates.append({"a": a, "b": b, "similarity": score})
 
     eval_only_groups = {groups.find(r.id) for r in rows if r.target is None}
+    # Every known id per group, unsupported and pending records included: a scenario can be
+    # joined through a record that never reaches a split file (trained -> unsupported ->
+    # pending), and only this membership still says so once the training row is gone.
+    members: dict[str, list[str]] = {}
+    for rid in sorted(known):
+        members.setdefault(groups.find(rid), []).append(rid)
     for row in rows:
         row.group = groups.find(row.id)
+        row.group_members = list(members[row.group])
         if row.scope == "game_specific":
             row.split = "test"
         elif row.group in eval_only_groups or _in_validation(row.group, split_seed, val_fraction):

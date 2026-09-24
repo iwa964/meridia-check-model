@@ -279,6 +279,9 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
             # Explicit links from each training row, so a row linked to one stays excluded from
             # scoring even after the training row is removed from the data.
             "train_links": {r["id"]: r.get("links", []) for r in train_rows},
+            # Every id grouped with a training row at prepare time, transitively and including
+            # records that were never trainable, so a later-annotated member stays excluded.
+            "train_scenario_ids": sorted({i for r in train_rows for i in r.get("group_members", [])}),
         },
         "token_lengths": {"train": train_stats, "val": val_stats},
         "metrics": metrics,
