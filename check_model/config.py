@@ -140,7 +140,9 @@ RANGES = (("data.val_fraction", 0.0, 1.0, True),
           ("data.near_duplicate_threshold", 0.0, 1.0, True),
           ("train.warmup_ratio", 0.0, 1.0, False),
           ("lora.dropout", 0.0, 1.0, False),
-          ("train.weight_decay", 0.0, math.inf, True))
+          ("train.weight_decay", 0.0, math.inf, True),
+          # transformers.set_seed also seeds NumPy, whose seed must fit in 32 unsigned bits.
+          ("seed", 0, 2**32 - 1, True))
 
 
 #: Values that must be above zero. Zero is accepted by the libraries and trains nothing (a zero
@@ -151,15 +153,21 @@ POSITIVE = ("train.learning_rate", "train.num_train_epochs", "train.per_device_t
             "smoke.num_examples", "smoke.max_steps")
 
 
+def _setting(config: dict, key: str):
+    """The value at a dotted key, top-level ("seed") or in a section ("train.max_steps")."""
+    *sections, name = key.split(".")
+    for section in sections:
+        config = config[section]
+    return config[name]
+
+
 def _check_ranges(config: dict) -> None:
     for key in POSITIVE:
-        section, name = key.split(".")
-        value = config[section][name]
+        value = _setting(config, key)
         if not (math.isfinite(value) and value > 0):
             raise ValueError(f"config key {key!r} must be above 0, got {value!r}")
     for key, low, high, inclusive in RANGES:
-        section, name = key.split(".")
-        value = config[section][name]
+        value = _setting(config, key)
         if value is None:
             continue
         inside = math.isfinite(value) and low <= value and (value <= high if inclusive else value < high)

@@ -585,3 +585,61 @@ def test_training_records_the_split_bytes_it_was_built_from(tiny, tmp_path, monk
     main(["train", "--config", str(cfg)])
     (run,) = (tmp_path / "runs").iterdir()
     assert json.loads((run / "run_manifest.json").read_text())["examples"]["split_sha256"] == written
+
+
+def test_training_uses_the_catalog_prepare_validated(tiny, tmp_path, monkeypatch):
+    import yaml
+
+    import check_model.prepare as prepare_module
+    from check_model.__main__ import main
+
+    original = (Path(__file__).resolve().parent.parent / "catalog" / "meridia_catalog.json").read_bytes()
+    catalog_path = tmp_path / "catalog.json"
+    catalog_path.write_bytes(original)
+    real_build = prepare_module.build
+
+    def build_then_sync(config, *catalog):
+        result = real_build(config, *catalog)
+        replaced = json.loads(original)
+        replaced["attributes"] = replaced["attributes"][:-1]  # a sync meanwhile drops a label
+        catalog_path.write_text(json.dumps(replaced), encoding="utf-8")
+        return result
+
+    monkeypatch.setattr(prepare_module, "build", build_then_sync)
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(yaml.safe_dump({
+        "data": {"sources": [str(SUBSET)], "catalog": str(catalog_path),
+                 "prepared_dir": str(tmp_path / "prepared"), "val_fraction": 0.5},
+        "model": {"base_model": str(tiny["dir"])},
+        "train": {"output_dir": str(tmp_path / "runs"), "max_steps": 1, "per_device_train_batch_size": 2}}),
+        encoding="utf-8")
+    main(["train", "--config", str(cfg)])
+    (run,) = (tmp_path / "runs").iterdir()
+    assert json.loads((run / "catalog.json").read_text(encoding="utf-8")) == json.loads(original)
+
+
+def test_a_run_is_served_only_with_the_model_files_it_saved(tiny, tmp_path):
+    from check_model.infer import CheckModel
+    from check_model.train import train
+
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(tiny["dir"])
+    run = tmp_path / "run"
+    train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
+    recorded = json.loads((run / "run_manifest.json").read_text())["model_files"]
+    assert "adapter_model.safetensors" in recorded and "tokenizer_config.json" in recorded
+    CheckModel(run, max_new_tokens=4)  # as saved: loads
+
+    adapter_config = run / "model" / "adapter_config.json"
+    saved = adapter_config.read_bytes()
+    adapter_config.write_bytes(saved + b"\n")  # still valid JSON, and still another file
+    with pytest.raises(ValueError, match=r"\['adapter_config.json'\] differ"):
+        CheckModel(run, max_new_tokens=4)
+    adapter_config.write_bytes(saved)
+    (run / "model" / "added.txt").write_text("copied in later\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"\['added.txt'\] differ"):
+        CheckModel(run, max_new_tokens=4)
+    (run / "model" / "added.txt").unlink()
+    (run / "model" / "tokenizer_config.json").unlink()
+    with pytest.raises(ValueError, match=r"\['tokenizer_config.json'\] differ"):
+        CheckModel(run, max_new_tokens=4)

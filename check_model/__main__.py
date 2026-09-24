@@ -15,9 +15,14 @@ from .prepare import split_hashes
 
 
 def _prepare(config: dict):
-    from .prepare import SPLIT_KEYS, build, summary, write
+    from .prepare import SPLIT_KEYS, build, checked_catalog, summary, write
 
-    rows, report = build(config)
+    path = config["data"]["catalog"]
+    try:
+        catalog = checked_catalog(path)
+    except (OSError, ValueError) as exc:
+        sys.exit(f"data.catalog {path}: {exc}")
+    rows, report = build(config, catalog)
     print(summary(report))
     hashes = write(rows, report, config["data"]["prepared_dir"], splits=not report.errors,
                    split_config={k: config["data"][k] for k in SPLIT_KEYS})
@@ -27,8 +32,9 @@ def _prepare(config: dict):
               file=sys.stderr)
         sys.exit(1)
     # The hashes of the bytes just written from these rows -- not a later read of the files,
-    # which another prepare could have replaced by then.
-    return rows, report, hashes
+    # which another prepare could have replaced by then -- and the catalog the rows were
+    # validated against, not a later read of data.catalog, which a sync could have replaced.
+    return rows, report, hashes, catalog
 
 
 def _require_training_stack() -> None:
@@ -67,14 +73,14 @@ def cmd_train(args) -> None:
     from .train import train
 
     config = load_config(args.config)
-    rows, report, split_sha256 = _prepare(config)
+    rows, report, split_sha256, catalog = _prepare(config)
     train_rows = [r.to_json() for r in rows if r.split == "train"]
     val_rows = [r.to_json() for r in rows if r.split == "val"]
     if not train_rows:
         sys.exit("no training rows")
     run_dir = _run_dir(config, config["run_name"])
     manifest = train(config, train_rows, val_rows, run_dir=run_dir, source_files=report.sources,
-                     split_sha256=split_sha256)
+                     split_sha256=split_sha256, catalog=catalog)
     print(json.dumps(manifest["metrics"], indent=2))
     print(f"saved {run_dir}")
 
@@ -273,7 +279,6 @@ def cmd_evaluate(args) -> None:
 def cmd_smoke(args) -> None:
     _require_training_stack()
     from . import prompt
-    from .catalog import load_catalog
     from .evaluate import evaluate_rows
     from .infer import CheckModel
     from .train import train
@@ -285,7 +290,7 @@ def cmd_smoke(args) -> None:
         stages.append(stage)
         print(f"[ok] {stage}: {detail}", flush=True)
 
-    rows, report, split_sha256 = _prepare(config)
+    rows, report, split_sha256, catalog = _prepare(config)
     done("load + validate", f"{len(report.trainable)} trainable rows, {len(report.errors)} errors")
 
     smoke = config["smoke"]
@@ -311,7 +316,7 @@ def cmd_smoke(args) -> None:
         # exclusively, so train() is told it already exists.
         run_dir.mkdir(parents=True, exist_ok=False)
         tiny_dir = run_dir / "tiny-random-model"
-        system = prompt.system_prompt(load_catalog(config["data"]["catalog"]))
+        system = prompt.system_prompt(catalog)
         make_tiny_model(tiny_dir, [r.to_json() for r in rows], system)
         config = copy.deepcopy(config)
         config["model"].update(base_model=str(tiny_dir), revision=None)
@@ -319,7 +324,7 @@ def cmd_smoke(args) -> None:
 
     manifest = train(config, picked, [], run_dir=run_dir, source_files=report.sources,
                      max_steps=smoke["max_steps"], mode="smoke",
-                     split_sha256=split_sha256, run_dir_created=args.tiny)
+                     split_sha256=split_sha256, run_dir_created=args.tiny, catalog=catalog)
     losses = [e["loss"] for e in _train_log(run_dir) if "loss" in e]
     done("train", f"{manifest['global_steps']} steps, loss {losses[0] if losses else '?'} -> "
                   f"{losses[-1] if losses else '?'}")

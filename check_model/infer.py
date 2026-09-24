@@ -64,6 +64,23 @@ def load_run_catalog(run_dir: str | Path, manifest: dict) -> Catalog:
     return parse_catalog(raw)
 
 
+def check_model_files(run_dir: str | Path, manifest: dict) -> None:
+    """The run's model/ directory, refused unless it holds exactly the files training saved: an
+    edited adapter, config or tokenizer file would serve answers the recorded run never gave."""
+    from .train import file_sha256s
+
+    recorded = manifest.get("model_files")
+    model_dir = Path(run_dir) / "model"
+    if not isinstance(recorded, dict) or not recorded:
+        raise ValueError("run_manifest.json records no model_files digest; retrain, or load the run "
+                         "with the code version that trained it")
+    now = file_sha256s(model_dir)
+    changed = sorted(p for p in recorded.keys() | now.keys() if recorded.get(p) != now.get(p))
+    if changed:
+        raise ValueError(f"{model_dir}: {changed} differ from the files saved at training "
+                         "(edited, added or removed); the run's model was changed")
+
+
 def check_format(manifest: dict) -> None:
     got = manifest["prompt"]["format_version"]
     if got != prompt.PROMPT_FORMAT_VERSION:
@@ -108,6 +125,7 @@ class CheckModel:
         check_format(self.manifest)
         self.system = self.manifest["prompt"]["system_prompt"]
         self.catalog = load_run_catalog(self.run_dir, self.manifest)
+        check_model_files(self.run_dir, self.manifest)
         model_dir = self.run_dir / "model"
         base = self.manifest["base_model"]
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")

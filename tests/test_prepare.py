@@ -201,6 +201,16 @@ def test_values_that_would_train_or_generate_nothing_are_refused(tmp_path, secti
         load_config(path)
 
 
+@pytest.mark.parametrize("value", [-1, 2**32])
+def test_a_seed_numpy_cannot_take_is_refused(tmp_path, value):
+    path = tmp_path / "config.yaml"
+    path.write_text(f"seed: {value}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"config key 'seed' must be in \[0, 4294967295\]"):
+        load_config(path)
+    path.write_text(f"seed: {2**32 - 1}\n", encoding="utf-8")
+    assert load_config(path)["seed"] == 2**32 - 1
+
+
 @pytest.mark.parametrize("section, key, value", [
     ("train", "weight_decay", ".inf"), ("train", "weight_decay", "-0.1"), ("train", "learning_rate", ".nan"),
     ("data", "val_fraction", ".nan")])
@@ -482,3 +492,20 @@ def test_a_blank_similarity_text_is_named(tmp_path):
     with pytest.raises(ValueError, match=r"not a prepared row \(similarity_text is blank"):
         read_split(tmp_path, "val")
 
+
+
+@pytest.mark.parametrize("change, problem", [
+    (lambda c: c["difficulties"].append("legendary"), "legendary"),
+    (lambda c: c["kinds"].append("item"), "catalog kinds"),
+])
+def test_prepare_refuses_a_catalog_the_prompt_cannot_describe(tmp_path, change, problem):
+    catalog = json.loads((ROOT / "catalog" / "meridia_catalog.json").read_text(encoding="utf-8"))
+    change(catalog)
+    path = tmp_path / "catalog.json"
+    path.write_text(json.dumps(catalog), encoding="utf-8")
+    cfg = config_file(tmp_path, SUBSET, catalog=str(path))
+    with pytest.raises(ValueError, match=problem):
+        build(load_config(cfg))
+    with pytest.raises(SystemExit, match=f"data.catalog {re.escape(str(path))}: .*{problem}"):
+        main(["prepare", "--config", cfg])
+    assert not (tmp_path / "prepared" / "train.jsonl").exists()

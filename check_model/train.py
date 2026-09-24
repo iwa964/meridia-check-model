@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 from . import prompt
-from .catalog import load_catalog
+from .catalog import Catalog, load_catalog
 from .evaluate import input_fingerprint
 
 IGNORE_INDEX = -100
@@ -192,11 +192,28 @@ def local_base_sha256(name_or_path: str) -> str | None:
     return digest.hexdigest()
 
 
+def file_sha256s(root: str | Path) -> dict[str, str]:
+    """SHA-256 of each file under `root`, by relative path: what the manifest pins the saved
+    model directory (adapter or weights, tokenizer, chat template) to."""
+    root = Path(root)
+    out = {}
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        digest = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                digest.update(chunk)
+        out[path.relative_to(root).as_posix()] = digest.hexdigest()
+    return out
+
+
 def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir: str | Path,
           source_files: list[dict], max_steps: int | None = None, mode: str = "train",
-          split_sha256: dict | None = None, run_dir_created: bool = False) -> dict:
+          split_sha256: dict | None = None, run_dir_created: bool = False,
+          catalog: Catalog | None = None) -> dict:
     """Trains, saves and returns the manifest. `train_rows` must all have a target;
-    `source_files` is the prepare report's `sources` (paths and sha256 of the data)."""
+    `source_files` is the prepare report's `sources` (paths and sha256 of the data).
+    `catalog` is the snapshot the rows were validated against (the CLI passes the one `prepare`
+    used); only when it is not given is `data.catalog` read here."""
     import peft
     import torch
     import transformers
@@ -235,7 +252,8 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
     run_dir.mkdir(parents=True, exist_ok=run_dir_created)
     transformers.set_seed(config["seed"])
 
-    catalog = load_catalog(config["data"]["catalog"])
+    if catalog is None:
+        catalog = load_catalog(config["data"]["catalog"])
     system = prompt.system_prompt(catalog)
     tokenizer = load_tokenizer(model_cfg["base_model"], model_cfg["revision"], model_cfg["trust_remote_code"])
     context = model_context_limit(model_cfg, tokenizer)
@@ -297,6 +315,8 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
         # catalog.json decides which labels the run's replies may use and which references are
         # valid; serving and evaluation refuse a copy that no longer matches this.
         "catalog_sha256": hashlib.sha256(catalog_bytes).hexdigest(),
+        # model/ as saved: serving refuses a file in it that was edited, added or removed since.
+        "model_files": file_sha256s(model_dir),
         "config": config,
         "precision": precision,
         "max_steps_used": steps,

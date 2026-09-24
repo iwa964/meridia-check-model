@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import prompt, strictjson
 from .adapter import Report, Row, load_rows
-from .catalog import load_catalog
+from .catalog import Catalog, load_catalog
 from .splits import assign_splits
 
 
@@ -24,9 +24,23 @@ PROVENANCE = "splits_provenance.json"
 SPLIT_KEYS = ("language", "val_fraction", "split_seed", "near_duplicate_threshold", "extra_groups")
 
 
-def build(config: dict) -> tuple[list[Row], Report]:
+def checked_catalog(path: str | Path) -> Catalog:
+    """The catalog at `path`, refused (ValueError) unless the prompt can describe it: a kind this
+    code does not implement or a difficulty it has no rule for would otherwise pass `prepare`
+    and only fail in training, after the run directory exists."""
+    catalog = load_catalog(path)
+    prompt.system_prompt(catalog)
+    return catalog
+
+
+def build(config: dict, catalog: Catalog | None = None) -> tuple[list[Row], Report]:
+    """`catalog` is the snapshot to label against, loaded from `data.catalog` when not given; a
+    caller that trains afterwards passes the same object on, not the path again."""
     data = config["data"]
-    catalog = load_catalog(data["catalog"])
+    if catalog is None:
+        catalog = checked_catalog(data["catalog"])
+    else:
+        prompt.system_prompt(catalog)
     rows, report = load_rows(data["sources"], catalog, data["language"])
     assign_splits(
         rows, report,
