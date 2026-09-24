@@ -152,7 +152,12 @@ def _tuple_constant(source: str, name: str) -> tuple[str, ...]:
         if isinstance(node, ast.Assign) and any(
             isinstance(t, ast.Name) and t.id == name for t in node.targets
         ):
-            return tuple(ast.literal_eval(node.value))
+            value = ast.literal_eval(node.value)
+            # ("STR") is the string "STR", and tuple() of it would be ("S", "T", "R").
+            if not (isinstance(value, (tuple, list)) and all(isinstance(v, str) for v in value)):
+                raise ValueError(f"{CHECK_TURN_PATH}: {name} must be a tuple or list of names, "
+                                 f"got {type(value).__name__} {value!r:.60}")
+            return tuple(value)
     raise ValueError(f"{CHECK_TURN_PATH} defines no {name}")
 
 
@@ -205,7 +210,7 @@ def sync_from_meridia(meridia_dir: str | Path) -> Catalog:
             raise ValueError(f"{root}: commit {commit} does not hold {SKILL_BANK_PATH} and {CHECK_TURN_PATH}")
         skill_bytes, check_bytes = blobs
     check_source = check_bytes.decode("utf-8")
-    return Catalog(
+    catalog = Catalog(
         skills=tuple(parse_skill_bank(skill_bytes.decode("utf-8"))),
         attributes=_tuple_constant(check_source, "ATTRIBUTES"),
         difficulties=_tuple_constant(check_source, "DIFFICULTIES"),
@@ -221,6 +226,10 @@ def sync_from_meridia(meridia_dir: str | Path) -> Catalog:
             },
         },
     )
+    problem = _catalog_problem(catalog.to_json())  # never write a snapshot parse_catalog refuses
+    if problem:
+        raise ValueError(f"the synced catalog is not valid: {problem}")
+    return catalog
 
 
 def write_catalog(catalog: Catalog, path: str | Path) -> None:

@@ -132,3 +132,20 @@ def test_sync_reads_both_files_from_the_commit_it_records(tmp_path):
     assert catalog.source["commit"] == subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
                                                       capture_output=True, text=True, check=True).stdout.strip()
     assert catalog.source["skill_catalog"]["blob_sha"] == head_blob
+
+
+@pytest.mark.parametrize("attributes, message", [
+    ('("STR")', r"ATTRIBUTES must be a tuple or list of names, got str 'STR'"),
+    ('("STR", 3)', "ATTRIBUTES must be a tuple or list of names"),
+    ('("STR", "STR")', r"the synced catalog is not valid: attributes lists \['STR'\] more than once"),
+    ('()', "the synced catalog is not valid: attributes must be a non-empty list of names"),
+])
+def test_sync_refuses_constants_that_are_not_a_list_of_names(tmp_path, attributes, message):
+    from check_model.__main__ import main
+
+    root = fake_meridia(tmp_path / "MeridiaGame", CONSTANTS.replace(
+        'ATTRIBUTES = ("STR", "CON", "SIZE", "DEX", "INT", "EDU", "WIL", "APP")', f"ATTRIBUTES = {attributes}"))
+    out = tmp_path / "catalog.json"
+    with pytest.raises(SystemExit, match=message):
+        main(["sync-catalog", "--meridia", str(root), "--out", str(out)])
+    assert not out.exists()

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from . import prompt, strictjson
@@ -19,9 +20,33 @@ from .splits import assign_splits
 
 
 PROVENANCE = "splits_provenance.json"
+#: Every file prepare writes under data.prepared_dir.
+OUTPUT_FILES = ("train.jsonl", "val.jsonl", "test.jsonl", "report.json", PROVENANCE)
 #: The data settings that decide which rows land in which split: re-preparing the same sources
 #: with any of these changed yields a different validation cohort.
 SPLIT_KEYS = ("language", "val_fraction", "split_seed", "near_duplicate_threshold", "extra_groups")
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    if a.resolve() == b.resolve():
+        return True
+    try:  # a hard link or another spelling of the same file
+        return a.exists() and b.exists() and os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def check_outputs(config: dict) -> None:
+    """ValueError when a file prepare writes is one it reads. A source or the catalog under
+    data.prepared_dir with an output's name would be overwritten -- report.json even by a
+    prepare that fails -- and the annotations with it."""
+    data = config["data"]
+    out = Path(data["prepared_dir"])
+    inputs = [Path(s) for s in data["sources"]] + [Path(data["catalog"])]
+    clashes = sorted({str(i) for i in inputs for name in OUTPUT_FILES if _same_file(i, out / name)})
+    if clashes:
+        raise ValueError(f"data.prepared_dir {out} is where prepare writes {list(OUTPUT_FILES)}, which would "
+                         f"overwrite the input(s) {clashes}; choose another prepared_dir")
 
 
 def checked_catalog(path: str | Path) -> Catalog:
@@ -37,6 +62,7 @@ def build(config: dict, catalog: Catalog | None = None) -> tuple[list[Row], Repo
     """`catalog` is the snapshot to label against, loaded from `data.catalog` when not given; a
     caller that trains afterwards passes the same object on, not the path again."""
     data = config["data"]
+    check_outputs(config)
     if catalog is None:
         catalog = checked_catalog(data["catalog"])
     else:

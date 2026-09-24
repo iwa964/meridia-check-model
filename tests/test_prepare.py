@@ -675,3 +675,23 @@ def test_an_integer_too_large_for_a_float_is_a_config_error_not_a_crash(tmp_path
         load_config(path)
     path.write_text(f"train:\n  per_device_train_batch_size: {huge}\n", encoding="utf-8")
     assert load_config(path)["train"]["per_device_train_batch_size"] == huge  # an int is exact
+
+
+@pytest.mark.parametrize("name", ["report.json", "train.jsonl", "splits_provenance.json"])
+def test_prepare_never_writes_over_a_source_or_the_catalog(tmp_path, subset, name):
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    source = prepared / name
+    source.write_text(json.dumps(subset), encoding="utf-8")
+    before = source.read_bytes()
+    cfg = config_file(tmp_path, source)
+    with pytest.raises(SystemExit, match=rf"refusing to prepare: .*would overwrite the input\(s\) \[.*{re.escape(name)}"):
+        main(["prepare", "--config", cfg])
+    assert source.read_bytes() == before
+    with pytest.raises(ValueError, match="would overwrite"):
+        build(load_config(cfg))
+    # The catalog too.
+    catalog = prepared / "report.json"
+    catalog.write_bytes((ROOT / "catalog" / "meridia_catalog.json").read_bytes())
+    with pytest.raises(SystemExit, match="would overwrite"):
+        main(["prepare", "--config", config_file(tmp_path, SUBSET, catalog=str(catalog))])

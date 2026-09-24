@@ -146,3 +146,10 @@ def test_identical_texts_pair_up_at_a_threshold_of_one():
     for text in texts:
         pairs = similar_pairs({"a": text, "b": text, "c": "an unrelated line of words"}, 1.0)
         assert ("a", "b", 1.0) in pairs, text
+
+
+def test_a_tiny_positive_threshold_does_not_pair_unrelated_texts():
+    # b shares no token with a or c: its cosine with them is exactly 0.
+    texts = {"a": "The gate is locked.", "b": "A storm rolls over a harbour.", "c": "The gate is locked."}
+    assert similar_pairs(texts, 1e-10) == [("a", "c", 1.0)]
+    assert similar_pairs(texts, 1.0) == [("a", "c", 1.0)]

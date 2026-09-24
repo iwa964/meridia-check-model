@@ -15,8 +15,12 @@ from .prepare import split_hashes
 
 
 def _prepare(config: dict):
-    from .prepare import SPLIT_KEYS, build, checked_catalog, summary, write
+    from .prepare import SPLIT_KEYS, build, check_outputs, checked_catalog, summary, write
 
+    try:
+        check_outputs(config)  # before anything is read, and so before anything is written
+    except ValueError as exc:
+        sys.exit(f"refusing to prepare: {exc}")
     path = config["data"]["catalog"]
     try:
         catalog = checked_catalog(path)

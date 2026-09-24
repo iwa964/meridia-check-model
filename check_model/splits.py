@@ -49,13 +49,16 @@ def similar_pairs(texts: dict[str, str], threshold: float) -> list[tuple[str, st
         v = {t: c * (math.log((1 + n) / (1 + df[t])) + 1) for t, c in counts.items()}
         norm = math.sqrt(sum(x * x for x in v.values())) or 1.0
         vectors[i] = {t: x / norm for t, x in v.items()}
+    # A cosine cannot exceed 1, so a threshold of 1.0 means "the same text": normalising leaves
+    # identical vectors a hair under it (0.9999999999999998). Only a threshold within
+    # SCORE_TOLERANCE of 1.0 is lowered to allow for that; subtracting the tolerance from every
+    # threshold would let a score of 0 pass a threshold of 1e-10.
+    bar = min(threshold, 1.0 - SCORE_TOLERANCE)
     out = []
     for a, b in itertools.combinations(ids, 2):
         va, vb = vectors[a], vectors[b]
         score = sum(x * vb.get(t, 0.0) for t, x in va.items())
-        # Normalising leaves identical vectors a hair under 1.0 (0.9999999999999998): within
-        # SCORE_TOLERANCE of the threshold counts, so a threshold of 1.0 still pairs exact copies.
-        if score >= threshold - SCORE_TOLERANCE:
+        if score >= bar:
             out.append((a, b, round(min(score, 1.0), 3)))
     return out
 
