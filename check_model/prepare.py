@@ -99,7 +99,14 @@ def read_split(prepared_dir: str | Path, split: str) -> list[dict]:
     path = Path(prepared_dir) / f"{split}.jsonl"
     if not path.exists():
         raise FileNotFoundError(f"{path} does not exist; run `python -m check_model prepare` first")
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = []
+    for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        if line.strip():
+            try:
+                rows.append(json.loads(line))
+            except ValueError as exc:
+                raise ValueError(f"{path}:{number}: not a prepared row ({exc}); re-run prepare") from None
+    return rows
 
 
 def summary(report: Report) -> str:

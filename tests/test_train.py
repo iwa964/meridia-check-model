@@ -380,6 +380,14 @@ def test_evaluate_refuses_split_contents_that_changed_with_the_same_sources(tiny
     with pytest.raises(SystemExit, match="val split: trained on [0-9a-f]{12}, now [0-9a-f]{12}"):
         main(["evaluate", "--run", str(run), "--split", "val"])
 
+    # A split file cut off mid-line: the hash check refuses before anything is parsed, and with
+    # --allow-data-change the damaged line is named instead of ending in a traceback.
+    val.write_text(val.read_text() + '{"id": "dice_tr', encoding="utf-8")
+    with pytest.raises(SystemExit, match="val split: trained on"):
+        main(["evaluate", "--run", str(run), "--split", "val"])
+    with pytest.raises(SystemExit, match=r"val\.jsonl:2: not a prepared row"):
+        main(["evaluate", "--run", str(run), "--split", "val", "--allow-data-change"])
+
 
 def test_the_manifest_records_every_training_scenario_member(tiny, tmp_path):
     from check_model.train import train

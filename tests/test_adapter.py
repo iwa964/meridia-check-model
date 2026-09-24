@@ -216,3 +216,21 @@ def test_duplicate_keys_in_a_source_are_an_error(catalog, tmp_path):
     path.write_text(doubled, encoding="utf-8")
     _, report = load(catalog, path)
     assert any("duplicate key(s) ['examples']" in m for _, m in messages(report))
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"roll_optional": None}, "optional_roll is set but roll_optional is not true"),
+    ({"roll_optional": 0}, "roll_optional must be true or false, got 0")])
+def test_an_inconsistent_optional_roll_is_an_error_not_a_label(catalog, subset, write_source, change, message):
+    from helpers import record
+
+    annotation = record(subset, "dice_train_000040")["annotation"]  # the fixture's optional roll
+    assert annotation["roll_optional"] is True and annotation.get("optional_roll") is not None
+    for key, value in change.items():
+        if value is None:
+            annotation.pop(key)
+        else:
+            annotation[key] = value
+    rows, report = load(catalog, write_source(subset))
+    assert ("dice_train_000040", message) in messages(report)
+    assert "dice_train_000040" not in {r.id for r in rows if r.target is not None}

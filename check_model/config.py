@@ -104,6 +104,9 @@ def _check_type(path: str, default, value) -> None:
     if not ok:
         expected = "string" if default is None else type(default).__name__
         raise ValueError(f"config key {path!r} must be a {expected}, got {value!r}")
+    if isinstance(value, str) and not value.strip():
+        # "" for target_modules, a path or a model name would only fail far from the config.
+        raise ValueError(f"config key {path!r} must not be blank")
     if isinstance(value, list):
         if path in NON_EMPTY and not value:
             raise ValueError(f"config key {path!r} must list at least one entry")

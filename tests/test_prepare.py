@@ -242,3 +242,11 @@ def test_predict_refuses_a_query_with_a_repeated_key(tmp_path):
     config.write_text("", encoding="utf-8")
     with pytest.raises(SystemExit, match=r"duplicate key\(s\) \['scene'\]"):
         main(["predict", "--run", str(tmp_path / "no-run"), "--config", str(config), "--input", str(source)])
+
+
+@pytest.mark.parametrize("section, key", [("lora", "target_modules"), ("model", "base_model"), ("data", "prepared_dir")])
+def test_a_blank_string_setting_is_refused(tmp_path, section, key):
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump({section: {key: "  "}}), encoding="utf-8")
+    with pytest.raises(ValueError, match=f"'{section}.{key}' must not be blank"):
+        load_config(path)

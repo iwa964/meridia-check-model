@@ -208,3 +208,14 @@ def test_a_link_to_a_removed_member_of_a_trained_scenario_relates():
     related = training_relatives([new], train_ids={"T"}, train_fingerprints=frozenset(), train_texts=[],
                                  threshold=None, train_links={"T": []}, train_scenario_ids={"T", "U"})
     assert related == {"C"}
+
+
+def test_a_row_grouped_now_through_a_historical_non_row_relates():
+    from check_model.evaluate import training_relatives
+
+    # T is removed; U (unsupported, never a row) was in T's scenario and links outward to C.
+    # C's own links name nothing, but prepare grouped it with U, and group_members says so.
+    new = dict(_row("C", "U", "A new scene."), links=[], group_members=["C", "U"])
+    related = training_relatives([new], train_ids={"T"}, train_fingerprints=frozenset(), train_texts=[],
+                                 threshold=None, train_links={"T": []}, train_scenario_ids={"T", "U"})
+    assert related == {"C"}

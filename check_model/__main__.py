@@ -85,7 +85,7 @@ def _run_config(args) -> dict:
     return manifest["config"]
 
 
-def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None:
+def _data_mismatch(config: dict, manifest: dict, rows: list[dict] | None = None) -> str | None:
     """Why the prepared data is not the data this run was trained on, or None. Scoring a run on
     another experiment's prepared files would still print plausible metrics."""
     from .prepare import PROVENANCE, SPLIT_KEYS
@@ -103,7 +103,7 @@ def _data_mismatch(config: dict, manifest: dict, rows: list[dict]) -> str | None
         return (f"{prepared} was split with {provenance.get('split_config')}, but the run was trained on a "
                 f"split made with {trained_split}: the validation rows differ")
     lang = manifest["prompt"]["language"]
-    other = sorted({r["lang"] for r in rows} - {lang})
+    other = sorted({r.get("lang") for r in rows or []} - {lang})
     if other:
         return f"{prepared} holds {other} rows, but the run's prompts are in {lang!r}"
     return None
@@ -164,11 +164,11 @@ def cmd_evaluate(args) -> None:
     from .prepare import read_split
 
     config = _run_config(args)
-    rows = read_split(config["data"]["prepared_dir"], args.split)
-    # Every refusal below needs only the manifest: checking them before the model loads spares a
-    # base-model download or a GPU allocation for a run that would be refused anyway.
+    # Every refusal below needs only the manifest and file hashes: checking them before the model
+    # loads spares a base-model download or a GPU allocation for a run that would be refused, and
+    # checking them before any split is parsed turns a damaged split file into a refusal.
     manifest = json.loads((Path(args.run) / "run_manifest.json").read_text(encoding="utf-8"))
-    mismatch = _data_mismatch(config, manifest, rows)
+    mismatch = _data_mismatch(config, manifest)
     if mismatch:
         sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
     changed = _changed_sources(config, manifest)
@@ -182,10 +182,18 @@ def cmd_evaluate(args) -> None:
         sys.exit(f"refusing to evaluate: the prepared data is not the revision the run was trained on ({listed}). "
                  "Pass --allow-data-change to score it anyway; trained rows stay excluded and the metrics "
                  "record the change.")
+    try:
+        splits = {s: read_split(config["data"]["prepared_dir"], s) for s in ("train", "val", "test")}
+    except ValueError as exc:
+        sys.exit(f"refusing to evaluate: {exc}")
+    rows = splits[args.split]
+    mismatch = _data_mismatch(config, manifest, rows)  # now with the rows' language
+    if mismatch:
+        sys.exit(f"refusing to evaluate: {mismatch}. Omit --config to use the run's own, or re-prepare with it.")
     model = CheckModel(args.run, max_new_tokens=config["inference"]["max_new_tokens"])
     train_ids = set(manifest["examples"]["train_ids"])
     fingerprints = frozenset(manifest["examples"].get("train_fingerprints", []))
-    all_rows = [r for s in ("train", "val", "test") for r in read_split(config["data"]["prepared_dir"], s)]
+    all_rows = [r for s in ("train", "val", "test") for r in splits[s]]
     related = training_relatives(all_rows, train_ids=train_ids, train_fingerprints=fingerprints,
                                  train_texts=manifest["examples"].get("train_texts", []),
                                  train_links=manifest["examples"].get("train_links", {}),

@@ -56,8 +56,11 @@ def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_finge
     # links to one, is in that scenario -- even when the id it names has since been removed.
     historical = (set(train_ids) | set(train_scenario_ids or ())
                   | {i for links in (train_links or {}).values() for i in links})
+    # group_members also names records that are not rows (unsupported, pending), so a row joined
+    # to a historical id only through one of them is still caught.
     related |= {r["id"] for r in all_rows if r["id"] not in trained
-                and (r["id"] in historical or set(r.get("links") or []) & historical)}
+                and (r["id"] in historical
+                     or (set(r.get("links") or []) | set(r.get("group_members") or [])) & historical)}
     if threshold is not None and train_texts:
         texts = {r["id"]: r.get("similarity_text") or "" for r in all_rows if r["id"] not in trained}
         texts.update({f"\0train{i}": t for i, t in enumerate(train_texts)})

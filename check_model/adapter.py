@@ -152,8 +152,15 @@ def _single_checks(annotation: dict, catalog: Catalog) -> list[dict]:
     roll_required = annotation.get("roll_required")
     if not isinstance(roll_required, bool):
         raise _Invalid(f"roll_required must be true or false, got {roll_required!r}")
-    if annotation.get("roll_optional"):
+    roll_optional = annotation.get("roll_optional", False)
+    if not isinstance(roll_optional, bool):
+        raise _Invalid(f"roll_optional must be true or false, got {roll_optional!r}")
+    if roll_optional:
         raise _Skip("unsupported", "optional roll (roll_optional: true)")
+    if annotation.get("optional_roll") is not None:
+        # The optional-roll details without the flag: training it as a plain label would flatten
+        # a form this pipeline does not support.
+        raise _Invalid("optional_roll is set but roll_optional is not true")
     checks = annotation.get("checks")
     if not isinstance(checks, list):
         raise _Invalid("checks must be a list")
