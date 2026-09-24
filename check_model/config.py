@@ -95,6 +95,12 @@ def _check_type(path: str, default, value) -> None:
         ok = isinstance(value, int) and not isinstance(value, bool)
     elif isinstance(default, float):
         ok = isinstance(value, (int, float)) and not isinstance(value, bool)
+        if ok and isinstance(value, int):
+            try:
+                float(value)  # what the libraries do with it; past ~1e308 an int has no float
+            except OverflowError:
+                raise ValueError(f"config key {path!r} must be a finite number, got an integer of "
+                                 f"{len(str(abs(value)))} digits") from None
     elif isinstance(default, list):
         ok = isinstance(value, list)
     elif isinstance(default, str):
@@ -163,10 +169,16 @@ def _setting(config: dict, key: str):
     return config[name]
 
 
+def _finite(value) -> bool:
+    # An int is exact and compares exactly with a float bound; math.isfinite would first convert
+    # it to float, which overflows past ~1e308 instead of answering.
+    return isinstance(value, int) or math.isfinite(value)
+
+
 def _check_ranges(config: dict) -> None:
     for key in POSITIVE:
         value = _setting(config, key)
-        if not (math.isfinite(value) and value > 0):
+        if not (_finite(value) and value > 0):
             raise ValueError(f"config key {key!r} must be above 0, got {value!r}")
     steps = config["train"]["max_steps"]
     if steps != -1 and steps <= 0:
@@ -178,7 +190,7 @@ def _check_ranges(config: dict) -> None:
         value = _setting(config, key)
         if value is None:
             continue
-        inside = math.isfinite(value) and low <= value and (value <= high if inclusive else value < high)
+        inside = _finite(value) and low <= value and (value <= high if inclusive else value < high)
         if not inside:
             bound = "]" if inclusive else ")"
             raise ValueError(f"config key {key!r} must be in [{low}, {high}{bound}, got {value!r}")

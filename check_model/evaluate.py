@@ -26,11 +26,14 @@ import hashlib
 import json
 from pathlib import Path
 
+from .adapter import input_key
+
 
 def input_fingerprint(query: dict) -> str:
     """A training input's identity independent of its id: a record renamed after training keeps
-    its fingerprint, so it is still recognised as trained on."""
-    return hashlib.sha256(json.dumps(query, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    its fingerprint, so it is still recognised as trained on. Built on prepare's duplicate key,
+    so an input prepare calls the same (key order, whitespace, case) is the same one here."""
+    return hashlib.sha256(input_key(query).encode("utf-8")).hexdigest()
 
 
 def training_relatives(all_rows: list[dict], *, train_ids: set[str], train_fingerprints: frozenset[str],

@@ -788,3 +788,18 @@ def test_evaluate_and_predict_load_the_model_against_the_manifest_they_read(tiny
     capsys.readouterr()
     main(["predict", "--run", str(run), "--input", str(query)])
     assert "raw_output" in json.loads(capsys.readouterr().out)
+
+
+def test_a_run_directory_inside_the_local_base_is_refused(tiny, tmp_path):
+    import shutil
+
+    from check_model.train import train
+
+    base = tmp_path / "base"
+    shutil.copytree(tiny["dir"], base)
+    config = copy.deepcopy(load_config(None))
+    config["model"]["base_model"] = str(base)
+    run = base / "runs" / "run"
+    with pytest.raises(ValueError, match="is inside the local base model"):
+        train(config, tiny["rows"][:2], [], run_dir=run, source_files=[], max_steps=1)
+    assert not (base / "runs").exists()

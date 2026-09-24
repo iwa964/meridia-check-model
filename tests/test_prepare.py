@@ -662,3 +662,16 @@ def test_prepare_refuses_a_source_holding_an_unpaired_surrogate(tmp_path, subset
     report = json.loads((tmp_path / "prepared" / "report.json").read_text(encoding="utf-8"))
     assert any("unpaired surrogate" in e["message"] for e in report["errors"])
     assert {p.name: p.read_bytes() for p in (tmp_path / "prepared").glob("*.jsonl")} == before
+
+
+def test_an_integer_too_large_for_a_float_is_a_config_error_not_a_crash(tmp_path):
+    path = tmp_path / "config.yaml"
+    huge = 10 ** 310
+    path.write_text(f"seed: {huge}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"config key 'seed' must be in \[0, 4294967295\]"):
+        load_config(path)
+    path.write_text(f"train:\n  learning_rate: {huge}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="'train.learning_rate' must be a finite number, got an integer of 311 digits"):
+        load_config(path)
+    path.write_text(f"train:\n  per_device_train_batch_size: {huge}\n", encoding="utf-8")
+    assert load_config(path)["train"]["per_device_train_batch_size"] == huge  # an int is exact

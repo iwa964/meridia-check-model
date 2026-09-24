@@ -219,3 +219,22 @@ def test_a_row_grouped_now_through_a_historical_non_row_relates():
     related = training_relatives([new], train_ids={"T"}, train_fingerprints=frozenset(), train_texts=[],
                                  threshold=None, train_links={"T": []}, train_scenario_ids={"T", "U"})
     assert related == {"C"}
+
+
+def test_a_training_input_is_recognised_by_prepare_s_duplicate_key(tmp_path):
+    from check_model.evaluate import training_relatives
+
+    trained = {"scene": "A cliff.", "player_action": "I climb it."}
+    variant = {"player_action": "I  CLIMB it.", "scene": "a cliff."}  # order, spacing and case only
+    assert input_fingerprint(variant) == input_fingerprint(trained)
+    renamed = [{"id": "renamed", "group": "renamed", "group_members": ["renamed"], "links": [],
+                "input": variant, "similarity_text": "a cliff i climb it", "source": "s", "split": "val",
+                "reference": ref(CLIMB_EXTREME)}]
+    metrics = evaluate_rows(EchoModel(decide(CLIMB_EXTREME)), renamed, split="val", train_ids={"old"},
+                            out_dir=tmp_path, train_fingerprints=frozenset({input_fingerprint(trained)}))
+    assert metrics["excluded_trained_rows"] == ["renamed"]
+    # Similarity at a threshold of 1.0 finds an identical text too, floating point aside.
+    same_text = [dict(renamed[0], input={"scene": "Another scene.", "player_action": "Another act."})]
+    related = training_relatives(same_text, train_ids={"old"}, train_fingerprints=frozenset(),
+                                 train_texts=["a cliff i climb it", "some unrelated training text"], threshold=1.0)
+    assert related == {"renamed"}

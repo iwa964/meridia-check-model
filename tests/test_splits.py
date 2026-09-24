@@ -135,3 +135,14 @@ def test_scenario_membership_reaches_through_records_that_are_not_rows(catalog, 
     assert rows["dice_train_000028"].group_members == ["dice_train_000028", "dice_train_000029",
                                                        "dice_train_000047"]
     assert rows["dice_train_000028"].to_json()["group_members"] == rows["dice_train_000028"].group_members
+
+
+def test_identical_texts_pair_up_at_a_threshold_of_one():
+    import json
+
+    data = json.loads(SUBSET.read_text(encoding="utf-8"))
+    texts = [r["scene"]["en"] + " " + (r.get("player_action") or r.get("observed_event"))["en"]
+             for r in data["examples"]]
+    for text in texts:
+        pairs = similar_pairs({"a": text, "b": text, "c": "an unrelated line of words"}, 1.0)
+        assert ("a", "b", 1.0) in pairs, text

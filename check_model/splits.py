@@ -28,6 +28,8 @@ from collections import Counter
 from .adapter import Report, Row
 
 _TOKEN = re.compile(r"[a-z0-9]+|[一-鿿]")
+#: Floating-point slack in a cosine score, far below any difference between two texts.
+SCORE_TOLERANCE = 1e-9
 
 
 def _text(row_input: dict) -> str:
@@ -51,8 +53,10 @@ def similar_pairs(texts: dict[str, str], threshold: float) -> list[tuple[str, st
     for a, b in itertools.combinations(ids, 2):
         va, vb = vectors[a], vectors[b]
         score = sum(x * vb.get(t, 0.0) for t, x in va.items())
-        if score >= threshold:
-            out.append((a, b, round(score, 3)))
+        # Normalising leaves identical vectors a hair under 1.0 (0.9999999999999998): within
+        # SCORE_TOLERANCE of the threshold counts, so a threshold of 1.0 still pairs exact copies.
+        if score >= threshold - SCORE_TOLERANCE:
+            out.append((a, b, round(min(score, 1.0), 3)))
     return out
 
 

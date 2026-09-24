@@ -223,6 +223,12 @@ def train(config: dict, train_rows: list[dict], val_rows: list[dict], *, run_dir
 
     model_cfg, lora_cfg, train_cfg = config["model"], config["lora"], config["train"]
     run_dir = Path(run_dir)
+    base_dir = Path(model_cfg["base_model"])
+    if base_dir.is_dir() and run_dir.resolve().is_relative_to(base_dir.resolve()):
+        # The base's digest is taken before the run is written; a run inside it would change it,
+        # and serving would refuse the finished run as trained on a base that has since changed.
+        raise ValueError(f"the run directory {run_dir} is inside the local base model {base_dir}; "
+                         "set train.output_dir outside it")
     # Settings that TrainingArguments validates (a scheduler name, precision on this device) fail
     # here: before the run directory exists, and before a tokenizer or a multi-gigabyte base
     # model is downloaded and loaded.
