@@ -1,0 +1,5 @@
+# Build products: regenerate with `python -m check_model prepare` / `train`.
+build/
+runs/
+__pycache__/
+.pytest_cache/

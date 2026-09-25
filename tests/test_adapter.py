@@ -1,0 +1,363 @@
+import hashlib
+from pathlib import Path
+
+import pytest
+from helpers import clone, record
+
+from check_model.adapter import load_rows
+
+SUBSET = Path(__file__).resolve().parent / "fixtures" / "dice_subset.json"
+
+
+def load(catalog, *paths, lang="en"):
+    return load_rows([str(p) for p in paths], catalog, lang)
+
+
+def messages(report):
+    return [(e["id"], e["message"]) for e in report.errors]
+
+
+def test_every_record_lands_in_exactly_one_bucket(catalog, subset):
+    rows, report = load(catalog, SUBSET)
+    assert report.errors == []
+    assert sorted(report.trainable) == [
+        "dice_train_000001", "dice_train_000002", "dice_train_000021", "dice_train_000028", "dice_train_000033"]
+    assert [e["id"] for e in report.eval_only] == ["dice_train_000038"]
+    assert [e["id"] for e in report.pending] == ["dice_train_000047"]
+    assert [e["id"] for e in report.skipped] == ["dice_train_000015"]
+    reasons = {e["id"]: e["reason"] for e in report.unsupported}
+    assert reasons["dice_train_000040"].startswith("optional roll")
+    assert reasons["dice_train_000044"].startswith("pair check")
+    assert reasons["dice_train_000019"].startswith("conditional")
+    assert reasons["dice_train_000029"].startswith("parameterized")
+    in_source = sum(len(v) for v in subset.values() if isinstance(v, list))
+    bucketed = (len(report.trainable) + len(report.eval_only) + len(report.pending)
+                + len(report.skipped) + len(report.unsupported))
+    assert bucketed == in_source == len(report.all_ids)
+
+
+def test_targets_and_inputs_come_from_the_annotation(catalog):
+    rows, _ = load(catalog, SUBSET)
+    by_id = {r.id: r for r in rows}
+    legacy = by_id["dice_train_000001"]
+    assert legacy.target == {"roll_required": True, "checks": [
+        {"kind": "skill", "name": "Climbing", "difficulty": "extreme"}]}
+    assert set(legacy.input) == {"scene", "player_action"}
+    observed = by_id["dice_train_000021"]
+    assert observed.target["checks"] == [{"kind": "attribute", "name": "STR", "difficulty": "success"}]
+    assert set(observed.input) == {"scene", "observed_event", "runtime_state"}
+    # The corrected label, not the one in annotation_history.
+    assert by_id["dice_train_000033"].target["checks"][0]["difficulty"] == "success"
+    alternatives = by_id["dice_train_000038"]
+    assert alternatives.target is None
+    assert [o[0]["name"] for o in alternatives.reference["options"]] == ["Economics", "Mathematics"]
+
+
+def test_language_selects_the_text(catalog):
+    rows, _ = load(catalog, SUBSET, lang="zh")
+    row = next(r for r in rows if r.id == "dice_train_000001")
+    assert row.input["player_action"] == "我抓住石缝，徒手爬上墙顶，再翻进院子。"
+
+
+def test_source_is_read_not_written(catalog):
+    before = hashlib.sha256(SUBSET.read_bytes()).hexdigest()
+    _, report = load(catalog, SUBSET)
+    assert hashlib.sha256(SUBSET.read_bytes()).hexdigest() == before == report.sources[0]["sha256"]
+
+
+def test_no_roll_label_is_trainable(catalog, subset, write_source):
+    # The policy's no-roll form (annotation_policy.no_roll); the dataset has none yet, so
+    # 000040's optional roll is reduced to it here.
+    annotation = record(subset, "dice_train_000040")["annotation"]
+    del annotation["roll_optional"], annotation["optional_roll"]
+    rows, report = load(catalog, write_source(subset))
+    row = next(r for r in rows if r.id == "dice_train_000040")
+    assert row.target == {"roll_required": False, "checks": []}
+    assert report.errors == []
+
+
+@pytest.mark.parametrize("mutate, rid, expected", [
+    (lambda r: r["annotation"]["checks"][0].update(name="maintenance"), "dice_train_000001", "unknown skill"),
+    (lambda r: r["annotation"]["checks"][0].update(difficulty="normal"), "dice_train_000001", "difficulty must be"),
+    (lambda r: r["annotation"]["checks"][0].pop("roll_system"), "dice_train_000001", "no roll_system"),
+    (lambda r: r["annotation"].update(raw_response=None), "dice_train_000001", "no raw_response"),
+    (lambda r: r["annotation"].update(roll_required="yes"), "dice_train_000001", "roll_required must be"),
+    (lambda r: r["scene"].pop("en"), "dice_train_000001", "missing scene.en"),
+    (lambda r: r.update(annotation=None), "dice_train_000001", "has no annotation"),
+    (lambda r: r.update(scenario_scope="meridia"), "dice_train_000001", "scenario_scope must be"),
+    (lambda r: r["annotation"]["checks"].append(dict(r["annotation"]["checks"][0])) or
+     r["annotation"]["checks"].append(dict(r["annotation"]["checks"][0])), "dice_train_000001", "3 checks"),
+])
+def test_invalid_records_are_named(catalog, subset, write_source, mutate, rid, expected):
+    mutate(record(subset, rid))
+    _, report = load(catalog, write_source(subset))
+    assert any(i == rid and expected in m for i, m in messages(report)), messages(report)
+
+
+@pytest.mark.parametrize("mutate, expected", [
+    (lambda r: r["annotation"]["checks"][0].update(name="Void Sense"), "special skill check"),
+    (lambda r: r["annotation"]["checks"][0].update(roll_system="bidirectional"), "roll_system"),
+])
+def test_unsupported_forms_are_reported_not_errors(catalog, subset, write_source, mutate, expected):
+    mutate(record(subset, "dice_train_000001"))
+    _, report = load(catalog, write_source(subset))
+    assert report.errors == []
+    assert any(e["id"] == "dice_train_000001" and expected in e["reason"] for e in report.unsupported)
+
+
+def test_duplicate_id_is_an_error(catalog, subset, write_source):
+    subset["examples"].append(clone(subset, "dice_train_000002", "dice_train_000001"))
+    _, report = load(catalog, write_source(subset))
+    assert any(i == "dice_train_000001" and "duplicate id" in m for i, m in messages(report))
+
+
+def test_duplicate_id_across_sources_is_an_error(catalog, subset, write_source):
+    _, report = load(catalog, SUBSET, write_source(subset))
+    assert len([m for _, m in messages(report) if "duplicate id" in m]) == 12
+
+
+def test_duplicate_input_is_an_error(catalog, subset, write_source):
+    subset["examples"].append(clone(subset, "dice_train_000001", "dice_train_copy"))
+    _, report = load(catalog, write_source(subset))
+    assert ("dice_train_copy", "same input as dice_train_000001") in messages(report)
+
+
+def test_unknown_section_and_schema_are_errors(catalog, subset, write_source):
+    subset["surprise_examples"] = []
+    _, report = load(catalog, write_source(subset))
+    assert any("unknown section 'surprise_examples'" in m for _, m in messages(report))
+    subset.pop("surprise_examples")
+    subset["schema_version"] = "2.0"
+    _, report = load(catalog, write_source(subset))
+    assert any("schema_version '2.0'" in m for _, m in messages(report))
+
+
+def test_catalog_version_mismatch_is_a_warning(catalog, subset, write_source):
+    subset["skill_catalog"]["blob_sha"] = "0" * 40
+    _, report = load(catalog, write_source(subset))
+    assert report.errors == [] and any("0" * 40 in w for w in report.warnings)
+
+
+@pytest.mark.parametrize("alternatives, expected", [
+    ([None, {"checks": []}], "each alternative must be an object"),
+    ("Economics or Mathematics", "alternatives must be a list"),
+])
+def test_malformed_alternatives_are_named_not_crashed(catalog, subset, write_source, alternatives, expected):
+    record(subset, "dice_train_000038")["annotation"]["alternatives"] = alternatives
+    _, report = load(catalog, write_source(subset))
+    assert any(i == "dice_train_000038" and expected in m for i, m in messages(report)), messages(report)
+
+
+@pytest.mark.parametrize("value", [None, {}, False, "examples"])
+def test_a_section_that_is_not_a_list_is_an_error(catalog, subset, write_source, value):
+    subset["skipped_examples"] = value
+    _, report = load(catalog, write_source(subset))
+    assert any("section 'skipped_examples' must be a list" in m for _, m in messages(report))
+
+
+def test_a_missing_or_unreadable_source_is_a_reported_error(catalog, tmp_path):
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    listed = tmp_path / "list.json"
+    listed.write_text("[]", encoding="utf-8")
+    _, report = load_rows([str(tmp_path / "absent.json"), str(broken), str(listed)], catalog, "en")
+    found = [(e["source"].rsplit("/", 1)[-1], e["message"]) for e in report.errors]
+    assert found[0][0] == "absent.json" and "source file not found" in found[0][1]
+    assert found[1][0] == "broken.json" and "not valid JSON" in found[1][1]
+    assert found[2][0] == "list.json" and "must hold a JSON object" in found[2][1]
+
+
+@pytest.mark.parametrize("key", ["skill_catalog", "attribute_catalog"])
+def test_malformed_catalog_metadata_is_a_reported_error(catalog, subset, write_source, key):
+    subset[key] = "53680ef9"
+    _, report = load(catalog, write_source(subset))
+    assert any(f"{key} must be an object" in m for _, m in messages(report))
+
+
+@pytest.mark.parametrize("misspelled", ["pending_example", "example"])
+def test_records_under_a_misspelled_section_name_are_an_error(catalog, subset, write_source, misspelled):
+    subset[misspelled] = subset.pop("pending_examples")
+    _, report = load(catalog, write_source(subset))
+    assert any(f"unknown section {misspelled!r}" in m for _, m in messages(report))
+
+
+def test_a_metadata_list_without_ids_is_not_mistaken_for_records(catalog, subset, write_source):
+    # The shape of the dataset's own skill_catalog_history entries: {blob_sha, path, repository}.
+    subset["skill_catalog_history"] = [{"blob_sha": "0" * 40, "path": "Scripts/profile/skill/SkillBank.gd",
+                                        "repository": "iwa964/MeridiaGame"}]
+    _, report = load(catalog, write_source(subset))
+    assert report.errors == []
+
+
+@pytest.mark.parametrize("mode", [["observed_event"], {"en": "observed_event"}, 3])
+def test_a_non_string_input_mode_is_a_record_error(catalog, subset, write_source, mode):
+    from helpers import record
+
+    record(subset, "dice_train_000021")["input_mode"] = mode
+    _, report = load(catalog, write_source(subset))
+    assert ("dice_train_000021", f"input_mode must be a string, got {type(mode).__name__}") in messages(report)
+
+
+@pytest.mark.parametrize("link", [["dice_train_000028"], "", None, 28])
+def test_a_malformed_related_example_id_is_a_record_error(catalog, subset, write_source, link):
+    from helpers import record
+
+    record(subset, "dice_train_000029")["related_example_id"] = link
+    _, report = load(catalog, write_source(subset))
+    assert any(i == "dice_train_000029" and "related_example_id must be a non-empty string id" in m
+               for i, m in messages(report))
+
+
+def test_duplicate_keys_in_a_source_are_an_error(catalog, tmp_path):
+    text = SUBSET.read_text(encoding="utf-8")
+    # A merge that left two `examples` sections: json.loads alone keeps the second, silently.
+    doubled = text.replace('"examples": [', '"examples": [], "examples": [', 1)
+    path = tmp_path / "doubled.json"
+    path.write_text(doubled, encoding="utf-8")
+    _, report = load(catalog, path)
+    assert any("duplicate key(s) ['examples']" in m for _, m in messages(report))
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"roll_optional": None}, "optional_roll is set but roll_optional is not true"),
+    ({"roll_optional": 0}, "roll_optional must be true or false, got 0")])
+def test_an_inconsistent_optional_roll_is_an_error_not_a_label(catalog, subset, write_source, change, message):
+    from helpers import record
+
+    annotation = record(subset, "dice_train_000040")["annotation"]  # the fixture's optional roll
+    assert annotation["roll_optional"] is True and annotation.get("optional_roll") is not None
+    for key, value in change.items():
+        if value is None:
+            annotation.pop(key)
+        else:
+            annotation[key] = value
+    rows, report = load(catalog, write_source(subset))
+    assert ("dice_train_000040", message) in messages(report)
+    assert "dice_train_000040" not in {r.id for r in rows if r.target is not None}
+
+
+@pytest.mark.parametrize("mode, message", [
+    ("pair", "check_mode 'pair' contradicts roll_required: false"),
+    ("singel", "check_mode must be single or pair, got 'singel'")])
+def test_a_no_roll_label_with_a_check_mode_is_an_error(catalog, subset, write_source, mode, message):
+    from helpers import clone
+
+    # 000040's no-roll label without its optional-roll part: a plain no-roll label.
+    no_roll = clone(subset, "dice_train_000040", "dice_train_000940")
+    no_roll["scene"]["en"] = "A variation. " + no_roll["scene"]["en"]
+    for key in ("roll_optional", "optional_roll"):
+        no_roll["annotation"].pop(key)
+    subset["examples"].append(no_roll)
+    rows, report = load(catalog, write_source(subset))
+    assert "dice_train_000940" in {r.id for r in rows if r.target is not None}  # control: accepted as is
+    no_roll["annotation"]["check_mode"] = mode
+    rows, report = load(catalog, write_source(subset))
+    assert ("dice_train_000940", message) in messages(report)
+
+
+def test_the_recorded_hash_is_of_the_bytes_that_were_parsed(catalog, subset, write_source, monkeypatch):
+    import json as json_module
+
+    source = Path(write_source(subset))
+    parsed = source.read_bytes()
+    edited = json_module.dumps({**subset, "dataset_name": "saved again meanwhile"}).encode("utf-8")
+    swapped = []
+    real_bytes, real_text = Path.read_bytes, Path.read_text
+
+    def then_save_again(read):
+        def wrapper(self, *args, **kwargs):
+            out = read(self, *args, **kwargs)
+            if self == source and not swapped:  # the file is saved again right after the first read
+                swapped.append(True)
+                source.write_bytes(edited)
+            return out
+        return wrapper
+
+    monkeypatch.setattr(Path, "read_bytes", then_save_again(real_bytes))
+    monkeypatch.setattr(Path, "read_text", then_save_again(real_text))
+    _, report = load(catalog, source)
+    assert report.sources[0]["sha256"] == hashlib.sha256(parsed).hexdigest()
+
+
+@pytest.mark.parametrize("rid, mode, message", [
+    ("dice_train_000001", "pair", "check_mode 'pair' needs exactly 2 check(s), got 1"),
+    ("dice_train_000044", "single", "check_mode 'single' needs exactly 1 check(s), got 2")])
+def test_a_check_mode_that_disagrees_with_the_checks_is_an_error(catalog, subset, write_source, rid, mode, message):
+    record(subset, rid)["annotation"]["check_mode"] = mode
+    _, report = load(catalog, write_source(subset))
+    assert (rid, message) in messages(report)
+
+
+def test_alternatives_that_repeat_one_choice_are_an_error(catalog, subset, write_source):
+    import copy
+
+    alternatives = record(subset, "dice_train_000038")["annotation"]["alternatives"]
+    alternatives[1] = copy.deepcopy(alternatives[0])
+    _, report = load(catalog, write_source(subset))
+    assert ("dice_train_000038", "alternatives repeat the same choice; one_of needs distinct options") in messages(report)
+
+
+def test_a_source_input_that_predict_would_refuse_is_an_error(catalog, subset, write_source):
+    from check_model import prompt
+
+    state = {}
+    for _ in range(prompt.MAX_JSON_DEPTH):
+        state = {"x": state}  # one level past the bound, counting runtime_state itself
+    record(subset, "dice_train_000021")["runtime_state"] = state
+    rows, report = load(catalog, write_source(subset))
+    assert ("dice_train_000021", f"runtime_state.{'x.' * 99}x is nested more than 100 levels deep") in messages(report)
+    assert "dice_train_000021" not in {r.id for r in rows}
+
+
+def test_a_source_nested_past_the_decoding_bound_is_an_error(catalog, subset, write_source):
+    from check_model import strictjson
+
+    deep = {}
+    for _ in range(strictjson.MAX_DEPTH + 50):
+        deep = {"x": deep}
+    subset["notes"] = deep  # metadata the recursive link walker would otherwise descend
+    rows, report = load(catalog, write_source(subset))
+    assert [m for _, m in messages(report)] == [f"not valid JSON: nested more than {strictjson.MAX_DEPTH} levels deep"]
+    assert rows == []
+
+
+@pytest.mark.parametrize("sections", [{}, {"examples": [], "pending_examples": []}])
+def test_a_source_with_no_records_is_an_error(catalog, subset, write_source, sections):
+    from check_model.adapter import SECTION_KIND
+
+    for section in SECTION_KIND:
+        subset.pop(section, None)
+    subset.update(sections)
+    rows, report = load(catalog, SUBSET, write_source(subset, "empty.json"))
+    assert [m for i, m in messages(report) if i is None] == [
+        f"no records: every record section ({', '.join(SECTION_KIND)}) is missing or empty"]
+
+
+@pytest.mark.parametrize("damage, message", [
+    (lambda entry: entry.pop("roll_system"), "check 'Drawing' has no roll_system"),
+    (lambda entry: entry.update(difficulty="impossible"), "difficulty must be one of"),
+    (lambda entry: entry.update(name="Not A Catalog Skill"), "unknown skill 'Not A Catalog Skill'"),
+])
+def test_a_pair_with_a_damaged_entry_is_an_error_not_unsupported(catalog, subset, write_source, damage, message):
+    damage(record(subset, "dice_train_000044")["annotation"]["checks"][1])
+    rows, report = load(catalog, write_source(subset))
+    assert [m for i, m in messages(report) if i == "dice_train_000044" and m.startswith(message)]
+    assert "dice_train_000044" not in {e["id"] for e in report.unsupported}
+
+
+def test_a_damaged_pair_entry_is_an_error_even_after_an_unsupported_one(catalog, subset, write_source):
+    first, second = record(subset, "dice_train_000044")["annotation"]["checks"]
+    first["name"] = catalog.special_skills[0]  # unsupported on its own (not check-based)
+    second.pop("roll_system")                  # damaged
+    rows, report = load(catalog, write_source(subset))
+    assert ("dice_train_000044", "check 'Drawing' has no roll_system") in messages(report)
+    assert "dice_train_000044" not in {e["id"] for e in report.unsupported}
+
+
+def test_a_damaged_alternative_is_an_error_even_after_an_unsupported_one(catalog, subset, write_source):
+    first, second = record(subset, "dice_train_000038")["annotation"]["alternatives"]
+    first["checks"][0]["name"] = catalog.special_skills[0]  # unsupported on its own (not check-based)
+    second["checks"][0].pop("roll_system")                  # damaged
+    rows, report = load(catalog, write_source(subset))
+    assert [m for i, m in messages(report) if i == "dice_train_000038" and m.endswith("has no roll_system")]
+    assert "dice_train_000038" not in {e["id"] for e in report.unsupported}

@@ -1,0 +1,3 @@
+# Data validation, `prepare` and the tests. No ML stack needed.
+pyyaml>=6
+pytest>=8

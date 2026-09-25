@@ -1,0 +1,558 @@
+{
+  "source": {
+    "repository": "iwa964/MeridiaGame",
+    "commit": "eb8f11ac529ec92e73dda1b1413e9f08f3c43f1b",
+    "skill_catalog": {
+      "path": "Scripts/profile/skill/SkillBank.gd",
+      "blob_sha": "53680ef911cffd3f78ed4ef338f62adbd3405bea"
+    },
+    "attribute_catalog": {
+      "path": "server/check_turn.py",
+      "blob_sha": "4db9cc484cae1548448824f353e31a211e859c3e",
+      "definition": "ATTRIBUTES"
+    }
+  },
+  "kinds": [
+    "skill",
+    "attribute"
+  ],
+  "difficulties": [
+    "success",
+    "hard",
+    "extreme"
+  ],
+  "attributes": [
+    "STR",
+    "CON",
+    "SIZE",
+    "DEX",
+    "INT",
+    "EDU",
+    "WIL",
+    "APP"
+  ],
+  "skills": [
+    {
+      "name": "Investigation",
+      "category": "general",
+      "subcategory": "",
+      "initial": "25"
+    },
+    {
+      "name": "Perception",
+      "category": "general",
+      "subcategory": "",
+      "initial": "25"
+    },
+    {
+      "name": "Hearing",
+      "category": "general",
+      "subcategory": "",
+      "initial": "25"
+    },
+    {
+      "name": "Dodging",
+      "category": "general",
+      "subcategory": "athletics",
+      "initial": "floor(DEX / 2)"
+    },
+    {
+      "name": "Climbing",
+      "category": "general",
+      "subcategory": "athletics",
+      "initial": "20"
+    },
+    {
+      "name": "Swimming",
+      "category": "general",
+      "subcategory": "athletics",
+      "initial": "20"
+    },
+    {
+      "name": "Jumping",
+      "category": "general",
+      "subcategory": "athletics",
+      "initial": "20"
+    },
+    {
+      "name": "Native Language",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "EDU"
+    },
+    {
+      "name": "Ancient Native Lang",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "0"
+    },
+    {
+      "name": "Sign Language",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "0"
+    },
+    {
+      "name": "Lang (Meridian)",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Lang (Ancient Meridian)",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "0"
+    },
+    {
+      "name": "Lang (Eidolians)",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Lang (Ancient Eidolian)",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "0"
+    },
+    {
+      "name": "Lang (Cevalian)",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Lang (Ancient Cevalian)",
+      "category": "languages",
+      "subcategory": "",
+      "initial": "0"
+    },
+    {
+      "name": "Biology",
+      "category": "sciences",
+      "subcategory": "natural sciences",
+      "initial": "1"
+    },
+    {
+      "name": "Chemistry",
+      "category": "sciences",
+      "subcategory": "natural sciences",
+      "initial": "1"
+    },
+    {
+      "name": "Physics",
+      "category": "sciences",
+      "subcategory": "natural sciences",
+      "initial": "1"
+    },
+    {
+      "name": "Astronomy",
+      "category": "sciences",
+      "subcategory": "natural sciences",
+      "initial": "1"
+    },
+    {
+      "name": "Geology",
+      "category": "sciences",
+      "subcategory": "natural sciences",
+      "initial": "1"
+    },
+    {
+      "name": "Botany",
+      "category": "sciences",
+      "subcategory": "natural sciences",
+      "initial": "1"
+    },
+    {
+      "name": "Zoology",
+      "category": "sciences",
+      "subcategory": "natural sciences",
+      "initial": "1"
+    },
+    {
+      "name": "Alchemy",
+      "category": "sciences",
+      "subcategory": "natural sciences",
+      "initial": "1"
+    },
+    {
+      "name": "Mathematics",
+      "category": "sciences",
+      "subcategory": "formal science",
+      "initial": "1"
+    },
+    {
+      "name": "Engineering",
+      "category": "sciences",
+      "subcategory": "applied science",
+      "initial": "1"
+    },
+    {
+      "name": "Medicine",
+      "category": "sciences",
+      "subcategory": "medicine",
+      "initial": "1"
+    },
+    {
+      "name": "Pharmacology",
+      "category": "sciences",
+      "subcategory": "medicine",
+      "initial": "1"
+    },
+    {
+      "name": "Psychology",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "Economics",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "Business",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "Politics",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "Anthropology",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "Criminology",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "Sociology",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "Geography",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "History",
+      "category": "sciences",
+      "subcategory": "social science",
+      "initial": "1"
+    },
+    {
+      "name": "Running",
+      "category": "sports",
+      "subcategory": "",
+      "initial": "CON"
+    },
+    {
+      "name": "Literature",
+      "category": "arts",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Performance",
+      "category": "arts",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Singing",
+      "category": "arts",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Drawing",
+      "category": "arts",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Smithing",
+      "category": "crafts",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Carpentry",
+      "category": "crafts",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Close-up Combat",
+      "category": "combat",
+      "subcategory": "",
+      "initial": "25"
+    },
+    {
+      "name": "Sword",
+      "category": "combat",
+      "subcategory": "cold weapons",
+      "initial": "15"
+    },
+    {
+      "name": "Knife",
+      "category": "combat",
+      "subcategory": "cold weapons",
+      "initial": "10"
+    },
+    {
+      "name": "Longbow",
+      "category": "combat",
+      "subcategory": "cold weapons",
+      "initial": "5"
+    },
+    {
+      "name": "Shortbow",
+      "category": "combat",
+      "subcategory": "cold weapons",
+      "initial": "10"
+    },
+    {
+      "name": "Hammer",
+      "category": "combat",
+      "subcategory": "cold weapons",
+      "initial": "5"
+    },
+    {
+      "name": "Spear",
+      "category": "combat",
+      "subcategory": "cold weapons",
+      "initial": "5"
+    },
+    {
+      "name": "Pistol",
+      "category": "combat",
+      "subcategory": "firearms/hot weapons",
+      "initial": "5"
+    },
+    {
+      "name": "Rifle",
+      "category": "combat",
+      "subcategory": "firearms/hot weapons",
+      "initial": "1"
+    },
+    {
+      "name": "Shotgun",
+      "category": "combat",
+      "subcategory": "firearms/hot weapons",
+      "initial": "1"
+    },
+    {
+      "name": "First Aid",
+      "category": "life_skills",
+      "subcategory": "",
+      "initial": "20"
+    },
+    {
+      "name": "Cooking",
+      "category": "life_skills",
+      "subcategory": "",
+      "initial": "5"
+    },
+    {
+      "name": "Survival",
+      "category": "life_skills",
+      "subcategory": "",
+      "initial": "10"
+    },
+    {
+      "name": "Driving",
+      "category": "life_skills",
+      "subcategory": "",
+      "initial": "5"
+    },
+    {
+      "name": "Navigation",
+      "category": "life_skills",
+      "subcategory": "",
+      "initial": "10"
+    },
+    {
+      "name": "Valuation",
+      "category": "life_skills",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Intimidation",
+      "category": "social_skills",
+      "subcategory": "",
+      "initial": "5"
+    },
+    {
+      "name": "Persuasion",
+      "category": "social_skills",
+      "subcategory": "",
+      "initial": "10"
+    },
+    {
+      "name": "Negotiation",
+      "category": "social_skills",
+      "subcategory": "",
+      "initial": "10"
+    },
+    {
+      "name": "Hypnosis",
+      "category": "social_skills",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Lockpicking",
+      "category": "subterfuge",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Deception",
+      "category": "subterfuge",
+      "subcategory": "",
+      "initial": "5"
+    },
+    {
+      "name": "Stealth",
+      "category": "subterfuge",
+      "subcategory": "",
+      "initial": "floor(DEX / 2)"
+    },
+    {
+      "name": "Disguise",
+      "category": "subterfuge",
+      "subcategory": "",
+      "initial": "1"
+    },
+    {
+      "name": "Void Sense",
+      "category": "special_skills",
+      "subcategory": "Void",
+      "initial": ""
+    },
+    {
+      "name": "Drift Resistance",
+      "category": "special_skills",
+      "subcategory": "Void",
+      "initial": ""
+    },
+    {
+      "name": "Erosion Tolerance",
+      "category": "special_skills",
+      "subcategory": "Void",
+      "initial": ""
+    },
+    {
+      "name": "Anchor Instinct",
+      "category": "special_skills",
+      "subcategory": "Void",
+      "initial": ""
+    },
+    {
+      "name": "Echo Perception",
+      "category": "special_skills",
+      "subcategory": "Void",
+      "initial": ""
+    },
+    {
+      "name": "Boundary Step",
+      "category": "special_skills",
+      "subcategory": "Void",
+      "initial": ""
+    },
+    {
+      "name": "Higher Hearing",
+      "category": "special_skills",
+      "subcategory": "Hearsayer",
+      "initial": ""
+    },
+    {
+      "name": "Truth Sense",
+      "category": "special_skills",
+      "subcategory": "Hearsayer",
+      "initial": ""
+    },
+    {
+      "name": "Compel",
+      "category": "special_skills",
+      "subcategory": "Hearsayer",
+      "initial": ""
+    },
+    {
+      "name": "Whispered Knowledge",
+      "category": "special_skills",
+      "subcategory": "Hearsayer",
+      "initial": ""
+    },
+    {
+      "name": "Sincere Resolve",
+      "category": "special_skills",
+      "subcategory": "Hearsayer",
+      "initial": ""
+    },
+    {
+      "name": "Soul-Energy Sense",
+      "category": "special_skills",
+      "subcategory": "The Childe",
+      "initial": ""
+    },
+    {
+      "name": "Soul Awakening",
+      "category": "special_skills",
+      "subcategory": "Psychopomps",
+      "initial": ""
+    },
+    {
+      "name": "Soul-Guiding",
+      "category": "special_skills",
+      "subcategory": "Psychopomps",
+      "initial": ""
+    },
+    {
+      "name": "Lantern Rite",
+      "category": "special_skills",
+      "subcategory": "items",
+      "initial": ""
+    },
+    {
+      "name": "Anchor Retrail",
+      "category": "special_skills",
+      "subcategory": "items",
+      "initial": ""
+    },
+    {
+      "name": "Death Rite",
+      "category": "special_skills",
+      "subcategory": "Death Priests",
+      "initial": ""
+    },
+    {
+      "name": "Resentment Severing",
+      "category": "special_skills",
+      "subcategory": "Death Priests",
+      "initial": ""
+    },
+    {
+      "name": "Nature Communion",
+      "category": "special_skills",
+      "subcategory": "Land Spirit",
+      "initial": ""
+    }
+  ]
+}
