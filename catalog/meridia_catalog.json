@@ -1,10 +1,10 @@
 {
   "source": {
     "repository": "iwa964/MeridiaGame",
-    "commit": "eb8f11ac529ec92e73dda1b1413e9f08f3c43f1b",
+    "commit": "faaa120f44207f3f4aa27fc194711f8d6bbb15d0",
     "skill_catalog": {
       "path": "Scripts/profile/skill/SkillBank.gd",
-      "blob_sha": "53680ef911cffd3f78ed4ef338f62adbd3405bea"
+      "blob_sha": "dc05ecffbb7afd0f6f57f73cfe691d9186052aa8"
     },
     "attribute_catalog": {
       "path": "server/check_turn.py",
@@ -325,6 +325,12 @@
       "category": "combat",
       "subcategory": "cold weapons",
       "initial": "10"
+    },
+    {
+      "name": "Crossbow",
+      "category": "combat",
+      "subcategory": "cold weapons",
+      "initial": "5"
     },
     {
       "name": "Hammer",
