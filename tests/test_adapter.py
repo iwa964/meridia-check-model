@@ -66,8 +66,8 @@ def test_source_is_read_not_written(catalog):
 
 
 def test_no_roll_label_is_trainable(catalog, subset, write_source):
-    # The policy's no-roll form (annotation_policy.no_roll); the dataset has none yet, so
-    # 000040's optional roll is reduced to it here.
+    # The policy's no-roll form (annotation_policy.no_roll); the fixture subset predates the
+    # dataset's first one (000015), so 000040's optional roll is reduced to it here.
     annotation = record(subset, "dice_train_000040")["annotation"]
     del annotation["roll_optional"], annotation["optional_roll"]
     rows, report = load(catalog, write_source(subset))
