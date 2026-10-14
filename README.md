@@ -1,12 +1,8 @@
 # meridia-check-model
 
-Meridia 的掷骰检定决策训练项目。此仓库是训练数据的后续维护位置。
-
 This repository is the canonical home for Meridia dice-check decision training data.
 
 ## Contribution workflow
-
-所有改动必须在独立分支完成并通过 PR 提交，禁止直接写入 `main`。当前训练数据标注在 `codex/dice-rolling-training` 分支继续维护。
 
 Make all changes on a dedicated branch and submit them through a pull request. Do not commit directly to `main`. Continue the current annotation session on `codex/dice-rolling-training`.
 
