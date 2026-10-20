@@ -133,7 +133,7 @@ How the training is set up:
 | LoRA | r 16, alpha 32, dropout 0.05, all linear layers | A common starting point. The adapter is small, the base weights stay untouched, and switching base models is a config change. |
 | learning rate | 2e-4, cosine, 10% warmup | The usual LoRA range (1e-4 – 3e-4). |
 | epochs × batch | 5 × (4 × 2 accumulation) | ~100 examples leave ~80 for training: about 10 steps per epoch, about 50 in total. Small data needs several passes. If `eval_loss` rises while training loss falls, use fewer epochs. |
-| max_seq_length | 1024 | System prompt (the 68-skill list) + one scene + a ~30-token answer. Raise it if a run refuses a row; never truncate. |
+| max_seq_length | 1024 | System prompt (the 69 rollable skills of the current snapshot) + one scene + a ~30-token answer. Raise it if a run refuses a row; never truncate. |
 | language | `en` | Catalog names and the game's request contract are English. `zh` is one config switch away and is worth comparing once validation has enough rows. |
 | decoding | greedy, 64 new tokens | The answer is a ~30-token JSON object. |
 
@@ -181,8 +181,9 @@ self-containing object is reported as a bad query.
   labels from the catalog the run was trained on.
 - `game_request` is in the single-check shape that `DialogueCheck.from_request()` accepts. It is
   `null` when no roll is needed.
-- A single **attribute** check comes back as a decision with a `note` and no `game_request`,
-  because the game has no single-attribute request form yet (see [Open questions](#open-questions)).
+- A single **attribute** check comes back as a decision with a `note` and no `game_request`. The
+  game takes a lone attribute as `{attribute, difficulty}` since MeridiaGame #381 (2026-09-26, in the
+  pinned snapshot), but this version does not emit that form yet (see [Open questions](#open-questions)).
 
 ## 5. Evaluate
 
@@ -264,9 +265,11 @@ Run on 2026-09-23 in a cloud container: CPU only, no GPU, `huggingface.co` block
 
 ## Open questions
 
-- **Single attribute checks have no game request form.** `from_request()` rolls a single
-  `{skill, difficulty}` as a skill only (`is_rollable_skill`), so STR in 000021 / 000045 cannot
-  be sent as a single check. Pairs do accept attributes (`validate_entry`).
+- **Single attribute checks are not sent yet.** Since MeridiaGame #381 (2026-09-26),
+  `from_request()` takes a lone attribute as `{"attribute": "STR", "difficulty": …}` and rolls it
+  on the attribute roller, so STR in 000021 / 000045 can be sent as a single check.
+  `to_game_request()` still returns them as a decision with a note; emitting the form is a
+  separate change. Pairs accept attributes too (`validate_entry`).
 - **No independent test set.** Every scene is `general`; the only `game_specific` label is
   000030's deferred branch.
 - **One confirmed no-roll example.** 000015 (singing a familiar song at an inn), skipped as

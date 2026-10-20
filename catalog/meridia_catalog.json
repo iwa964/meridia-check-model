@@ -1,14 +1,14 @@
 {
   "source": {
     "repository": "iwa964/MeridiaGame",
-    "commit": "faaa120f44207f3f4aa27fc194711f8d6bbb15d0",
+    "commit": "5f9de63a6e154537481af2a596994dba6acd92f1",
     "skill_catalog": {
       "path": "Scripts/profile/skill/SkillBank.gd",
-      "blob_sha": "dc05ecffbb7afd0f6f57f73cfe691d9186052aa8"
+      "blob_sha": "63bac9ad4e1e597f6ee6a145dedeb4be471e80f0"
     },
     "attribute_catalog": {
       "path": "server/check_turn.py",
-      "blob_sha": "4db9cc484cae1548448824f353e31a211e859c3e",
+      "blob_sha": "c0f17fcdd8c0d10e41b17eb6077231326cd2e76d",
       "definition": "ATTRIBUTES"
     }
   },
@@ -303,6 +303,12 @@
       "initial": "25"
     },
     {
+      "name": "Throwing",
+      "category": "combat",
+      "subcategory": "",
+      "initial": "15"
+    },
+    {
       "name": "Sword",
       "category": "combat",
       "subcategory": "cold weapons",
@@ -406,12 +412,6 @@
     },
     {
       "name": "Persuasion",
-      "category": "social_skills",
-      "subcategory": "",
-      "initial": "10"
-    },
-    {
-      "name": "Negotiation",
       "category": "social_skills",
       "subcategory": "",
       "initial": "10"
