@@ -388,6 +388,30 @@
     },
     {
       "annotation": {
+        "checks": [],
+        "rationale": null,
+        "raw_response": "那就作为不用投掷吧015",
+        "roll_required": false
+      },
+      "annotation_history": [
+        {
+          "annotation": null,
+          "correction_raw": "那就作为不用投掷吧015",
+          "skip_reason_raw": "换一个sample，这个有点处于要投掷和不要的边缘"
+        }
+      ],
+      "id": "dice_train_000015",
+      "player_action": {
+        "en": "I sing the familiar song without accompaniment, hoping the guests will enjoy it.",
+        "zh": "我不借助伴奏，唱起这首熟悉的歌，希望让客人们听得开心。"
+      },
+      "scene": {
+        "en": "At a small inn, the character agrees to sing a familiar song for several willing listeners, and the room is quiet enough for everyone to hear. Their voice is in its usual condition, with no deadline or pressure to perform.",
+        "zh": "在一家小旅店里，角色答应为几位愿意听歌的客人唱一首熟悉的歌，房间安静得足以听清歌声。角色嗓音状态正常，没有时间限制，也没有人强迫其表演。"
+      }
+    },
+    {
+      "annotation": {
         "checks": [
           {
             "difficulty": "hard",
@@ -1403,19 +1427,6 @@
     "repository": "iwa964/MeridiaGame"
   },
   "skipped_examples": [
-    {
-      "annotation": null,
-      "id": "dice_train_000015",
-      "player_action": {
-        "en": "I sing the familiar song without accompaniment, hoping the guests will enjoy it.",
-        "zh": "我不借助伴奏，唱起这首熟悉的歌，希望让客人们听得开心。"
-      },
-      "scene": {
-        "en": "At a small inn, the character agrees to sing a familiar song for several willing listeners, and the room is quiet enough for everyone to hear. Their voice is in its usual condition, with no deadline or pressure to perform.",
-        "zh": "在一家小旅店里，角色答应为几位愿意听歌的客人唱一首熟悉的歌，房间安静得足以听清歌声。角色嗓音状态正常，没有时间限制，也没有人强迫其表演。"
-      },
-      "skip_reason_raw": "换一个sample，这个有点处于要投掷和不要的边缘"
-    },
     {
       "id": "dice_train_000041",
       "input_mode": "observed_event",

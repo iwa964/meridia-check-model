@@ -260,7 +260,7 @@ Run on 2026-09-23 in a cloud container: CPU only, no GPU, `huggingface.co` block
 | Loss masking and generation stopping | ✅ the tiny model memorises 4 targets exactly through the pipeline |
 | `train` / `evaluate` / `predict` commands | ✅ ran with the tiny model |
 | **The configured base models (Qwen2.5-0.5B / 1.5B-Instruct), their chat templates, GPU / bf16 training** | ❌ **not run**: the model download is blocked here |
-| **Whether the model learns the check rules** | ❌ not measurable yet: 40 trainable rows, no test set |
+| **Whether the model learns the check rules** | ❌ not measurable yet: 42 trainable rows, no test set |
 
 ## Open questions
 
@@ -269,9 +269,10 @@ Run on 2026-09-23 in a cloud container: CPU only, no GPU, `huggingface.co` block
   be sent as a single check. Pairs do accept attributes (`validate_entry`).
 - **No independent test set.** Every scene is `general`; the only `game_specific` label is
   000030's deferred branch.
-- **No confirmed no-roll example.** The only `roll_required: false` label (000040) is an optional
-  roll, and 000015 was skipped as borderline. The model never sees a "no check" answer, and
-  `roll_required` can only be scored on positive rows.
+- **One confirmed no-roll example.** 000015 (singing a familiar song at an inn), skipped as
+  borderline until the creator labelled it no-roll on 2026-09-26 (「那就作为不用投掷吧015」), is the
+  only plain `roll_required: false` label; 000040 is an optional roll. The split puts 000015 in
+  train, so validation still holds no negative row and `roll_required` is scored on positives only.
 - **`roll_system_source: contextual_default`** (000020, 000021, 000045 — the attribute checks)
   is not defined in `annotation_policy`, whose default covers "one skill and a difficulty". The
   rows are used because the recorded `roll_system` is `unidirectional`.
