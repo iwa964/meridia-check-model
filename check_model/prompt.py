@@ -16,9 +16,9 @@ change; this version accepts exactly one entry. Entries use the pair-entry shape
 already validates (`DialogueCheck.validate_entry`: kind, name, difficulty).
 
 `to_game_request()` turns a decision into the request `DialogueCheck.from_request()`
-accepts. Its single-check form is `{"skill", "difficulty"}` and rolls skills only, so a
-single ATTRIBUTE check has no request form in the game today; it is returned as a
-decision with a note, never forced into the skill slot.
+accepts: `{"skill", "difficulty"}` for a skill. The game also takes a lone attribute as
+`{"attribute", "difficulty"}` (MeridiaGame #381), but this version does not emit it yet: a
+single ATTRIBUTE check is returned as a decision with a note, never forced into the skill slot.
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ PROMPT_FORMAT_VERSION = "1"
 MAX_CHECKS = 1  # single checks only in this version; the game's pair form is 2
 
 ATTRIBUTE_REQUEST_NOTE = (
-    "single attribute check: the game's single-check request {skill, difficulty} rolls skills only "
-    "(DialogueCheck.from_request), so this decision has no request form yet"
+    "single attribute check: the game accepts {attribute, difficulty} (DialogueCheck.from_request, "
+    "MeridiaGame #381), but this model version does not emit that request yet"
 )
 
 
