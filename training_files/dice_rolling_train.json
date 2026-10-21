@@ -28,7 +28,40 @@
     "parameterized_examples": "Creator-labeled general cases whose skill depends on an explicit scenario parameter belong in parameterized_examples. A skill selector preserves the creator's parameter without inventing a canonical name. Keep fixed_row_ready false until all selectors bind to valid catalog skills; do not export unresolved selectors as fixed-skill examples.",
     "check_mode": "Record creator-confirmed single-entry or paired checks as check_mode: single or pair. Pair describes two entries evaluated together; its individual threshold checks follow the project's roll_pair definition.",
     "alternative_examples": "Creator-approved interchangeable options belong in alternative_examples. choice: one_of means select one complete option; the options are not simultaneous checks. Every listed option is an accepted label. Preserve the accepted set when exporting, or record an explicitly selected option; do not silently choose one.",
-    "optional_rolls": "roll_required: false with roll_optional: true means no check is required by default, but the creator permits an optional check. Preserve that discretion when exporting; do not interpret it as a prohibition on rolling. Store only explicitly supplied optional-check parameters and failure guidance, leaving unspecified mechanics and consequences unset."
+    "optional_rolls": "roll_required: false with roll_optional: true means no check is required by default, but the creator permits an optional check. Preserve that discretion when exporting; do not interpret it as a prohibition on rolling. Store only explicitly supplied optional-check parameters and failure guidance, leaving unspecified mechanics and consequences unset.",
+    "skill_boundaries": [
+      {
+        "skills": [
+          "First Aid",
+          "Medicine"
+        ],
+        "rule": "An action that restores HP, such as bandaging, is First Aid. Medicine is mainly for scenes that need medical knowledge but restore no HP, such as examining blood or judging a person's condition.",
+        "instructions_zh": [
+          "涉及到包扎，也就是需要回血（回 HP）的操作，我们都用 First Aid。",
+          "像 Medicine 的话，主要是用于比如观察血液、观察人的状态等不涉及到回血、但确实需要医学知识的场景。"
+        ],
+        "source": "creator",
+        "date": "2026-09-26",
+        "ruled_on": [
+          "dice_train_000022"
+        ]
+      },
+      {
+        "skills": [
+          "Persuasion"
+        ],
+        "rule": "Persuading, negotiating and similar actions all roll Persuasion. The creator first ruled that the boundary between persuasion and negotiation is too unclear to label by, without merging the two skills, then removed Negotiation from the catalog altogether (MeridiaGame #400), so it is no longer a valid label.",
+        "instructions_zh": [
+          "46 的话，说服和谈判这个事情，倒不是说 Persuasion 和 Negotiation 可以直接合二为一，而是我觉得这是个边界更不清的东西。倒不如说我们在进行类似操作的时候，就直接全部过 Persuasion。",
+          "那你要不然就直接连带把 negotiation 从 skill bank 里面删掉。就是我们全线以后就全部都不用 negotiation 了，我们就全部都只用那个 persuasion"
+        ],
+        "source": "creator",
+        "date": "2026-09-26",
+        "ruled_on": [
+          "dice_train_000046"
+        ]
+      }
+    ]
   },
   "dataset_name": "dice_rolling_train",
   "description": {
@@ -548,19 +581,38 @@
         "en": "The character is pressing clean cloth against the wound and securing the dressing with a bandage, attempting to control the bleeding; whether the bleeding is controlled remains unresolved."
       },
       "annotation": {
-        "raw_response": "普通医学",
+        "raw_response": "22 那个回 First Aid 应该是对的。\n\n涉及到包扎，也就是需要回血（回 HP）的操作，我们都用 First Aid。\n\n像 Medicine 的话，主要是用于比如观察血液、观察人的状态等不涉及到回血、但确实需要医学知识的场景。",
         "roll_required": true,
         "checks": [
           {
             "kind": "skill",
-            "name": "Medicine",
+            "name": "First Aid",
             "difficulty": "success",
             "roll_system": "unidirectional",
             "roll_system_source": "creator_default"
           }
         ],
         "rationale": null
-      }
+      },
+      "annotation_history": [
+        {
+          "annotation": {
+            "raw_response": "普通医学",
+            "roll_required": true,
+            "checks": [
+              {
+                "kind": "skill",
+                "name": "Medicine",
+                "difficulty": "success",
+                "roll_system": "unidirectional",
+                "roll_system_source": "creator_default"
+              }
+            ],
+            "rationale": null
+          },
+          "correction_raw": "22 那个回 First Aid 应该是对的。\n\n涉及到包扎，也就是需要回血（回 HP）的操作，我们都用 First Aid。\n\n像 Medicine 的话，主要是用于比如观察血液、观察人的状态等不涉及到回血、但确实需要医学知识的场景。"
+        }
+      ]
     },
     {
       "id": "dice_train_000023",
