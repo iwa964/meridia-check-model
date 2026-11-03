@@ -37,8 +37,7 @@ def test_parse_is_strict(catalog, text, expected):
 def test_game_request_shapes():
     assert prompt.to_game_request(CLIMB) == ({"skill": "Climbing", "difficulty": "extreme"}, None)
     assert prompt.to_game_request(NO_ROLL) == (None, None)
-    request, note = prompt.to_game_request(STR)
-    assert request is None and "attribute" in note
+    assert prompt.to_game_request(STR) == ({"attribute": "STR", "difficulty": "success"}, None)
 
 
 def test_system_prompt_lists_every_label(catalog):
