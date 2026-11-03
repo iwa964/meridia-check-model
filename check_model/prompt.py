@@ -15,10 +15,9 @@ OUTPUT -- one JSON object, nothing else:
 change; this version accepts exactly one entry. Entries use the pair-entry shape the game
 already validates (`DialogueCheck.validate_entry`: kind, name, difficulty).
 
-`to_game_request()` turns a decision into the request `DialogueCheck.from_request()`
-accepts: `{"skill", "difficulty"}` for a skill. The game also takes a lone attribute as
-`{"attribute", "difficulty"}` (MeridiaGame #381), but this version does not emit it yet: a
-single ATTRIBUTE check is returned as a decision with a note, never forced into the skill slot.
+`to_game_request()` turns a decision into the single-check request
+`DialogueCheck.from_request()` accepts: `{"skill", "difficulty"}` for a skill and
+`{"attribute", "difficulty"}` for an attribute (the game's lone-attribute form, MeridiaGame #381).
 """
 
 from __future__ import annotations
@@ -35,12 +34,6 @@ from .catalog import Catalog
 #: scored or served with another.
 PROMPT_FORMAT_VERSION = "1"
 MAX_CHECKS = 1  # single checks only in this version; the game's pair form is 2
-
-ATTRIBUTE_REQUEST_NOTE = (
-    "single attribute check: the game accepts {attribute, difficulty} (DialogueCheck.from_request, "
-    "MeridiaGame #381), but this model version does not emit that request yet"
-)
-
 
 #: What each difficulty label means in the game: the roll must come in under this share of the
 #: tested value (MeridiaGame `Check.threshold`, pinned by DialogueCheckTest: success = value,
@@ -237,10 +230,14 @@ def parse_decision(text: str, catalog: Catalog) -> tuple[dict | None, list[str]]
 
 
 def to_game_request(decision: dict) -> tuple[dict | None, str | None]:
-    """(request for DialogueCheck.from_request, note). No roll -> (None, None)."""
+    """(request for DialogueCheck.from_request, note). No roll -> (None, None).
+
+    Every decision this version parses has a request form, so the note is always None; the
+    slot stays so `predict` and `evaluate` output keep the keys they document.
+    """
     if not decision["roll_required"]:
         return None, None
     (check,) = decision["checks"]
-    if check["kind"] == "attribute":
-        return None, ATTRIBUTE_REQUEST_NOTE
-    return {"skill": check["name"], "difficulty": check["difficulty"]}, None
+    # The game keys a single check by its kind, {"skill": …} or {"attribute": …}, and the
+    # kind is one of SUPPORTED_KINDS (parse_decision -> Catalog.entry_error).
+    return {check["kind"]: check["name"], "difficulty": check["difficulty"]}, None

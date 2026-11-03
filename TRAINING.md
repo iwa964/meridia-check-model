@@ -179,11 +179,10 @@ self-containing object is reported as a bad query.
 
 - The model's reply is parsed strictly: only that one JSON object is accepted, and only with
   labels from the catalog the run was trained on.
-- `game_request` is in the single-check shape that `DialogueCheck.from_request()` accepts. It is
-  `null` when no roll is needed.
-- A single **attribute** check comes back as a decision with a `note` and no `game_request`. The
-  game takes a lone attribute as `{attribute, difficulty}` since MeridiaGame #381 (2026-09-26, in the
-  pinned snapshot), but this version does not emit that form yet (see [Open questions](#open-questions)).
+- `game_request` is in the single-check shape that `DialogueCheck.from_request()` accepts:
+  `{"skill", "difficulty"}` for a skill, `{"attribute", "difficulty"}` for an attribute (the
+  lone-attribute form the game takes since MeridiaGame #381). It is `null` when no roll is needed,
+  and `note` is `null` for every decision this version emits.
 
 ## 5. Evaluate
 
@@ -265,11 +264,6 @@ Run on 2026-09-23 in a cloud container: CPU only, no GPU, `huggingface.co` block
 
 ## Open questions
 
-- **Single attribute checks are not sent yet.** Since MeridiaGame #381 (2026-09-26),
-  `from_request()` takes a lone attribute as `{"attribute": "STR", "difficulty": …}` and rolls it
-  on the attribute roller, so STR in 000021 / 000045 can be sent as a single check.
-  `to_game_request()` still returns them as a decision with a note; emitting the form is a
-  separate change. Pairs accept attributes too (`validate_entry`).
 - **No independent test set.** Every scene is `general`; the only `game_specific` label is
   000030's deferred branch.
 - **One confirmed no-roll example.** 000015 (singing a familiar song at an inn), skipped as
